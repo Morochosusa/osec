@@ -600,6 +600,50 @@
   .pan-prueba{background:var(--wnbg);border:2px solid var(--wn);color:var(--wn);font-weight:800;border-radius:12px;padding:10px 14px;margin-bottom:8px;}
   .pan-disp{display:flex;align-items:center;gap:14px;width:100%;margin-top:14px;min-height:84px;padding:12px 18px;background:#fff;border:3px solid var(--ac);border-radius:20px;font-family:inherit;text-align:left;color:var(--black);cursor:pointer;} .pan-disp b{display:block;font-size:22px;} .pan-disp small{color:var(--mu);font-size:15px;}
   .pan-c{width:84px;text-align:center;font-size:18px;font-weight:700;flex-shrink:0;} .pan-c small{color:var(--er);font-size:12px;} .pan-c.k{font-size:22px;font-weight:800;} .pan-ok{background:var(--okbg);border-radius:12px;padding:10px 12px;font-size:15px;}
+  /* ═══ Pedido en tablet: letra y filas más pequeñas (como la app de listas de referencia) para ver muchos más productos ═══ */
+  @media (min-width:601px){
+    body[data-page="pedido"] nav{min-height:52px;padding:6px 12px;} body[data-page="pedido"] .nav-tab{min-height:40px;padding:4px 14px;font-size:14px;border-radius:12px;}
+    #page-pedido.page{padding:6px 14px 96px;}
+    #page-pedido .ped-top{gap:8px;margin-top:6px;} #page-pedido .ped-top .bt{min-height:38px;font-size:15px;border-radius:12px;}
+    #page-pedido .ped2{grid-template-columns:270px 1fr;height:calc(100vh - 232px);height:calc(100dvh - 232px);min-height:300px;margin-top:6px;border-radius:14px;}
+    #page-pedido .ped-left{padding:8px;} #page-pedido .pl-head{font-size:16px;margin:2px 0 6px;}
+    #page-pedido .ped-left .form-control{min-height:38px;font-size:15px;margin-bottom:8px;border-radius:10px;}
+    #page-pedido .parea{min-height:54px;padding:6px 10px;gap:10px;} #page-pedido .pa-ic{font-size:24px;width:32px;} #page-pedido .pa-tx b{font-size:15px;} #page-pedido .pa-tx small{font-size:12px;}
+    #page-pedido .pr-head{padding:6px 8px;} #page-pedido .pr-title{font-size:16px;} #page-pedido .pr-sub{font-size:12px;}
+    #page-pedido .ped-tools{padding:6px 8px;gap:8px;} #page-pedido .ped-tools .bt{min-height:36px;font-size:14px;border-radius:10px;}
+    #page-pedido .sec-h{font-size:14px;padding:5px 12px;}
+    #page-pedido .prow{min-height:42px;} #page-pedido .pr-th{width:50px;min-height:42px;font-size:14px;}
+    #page-pedido .pr-main{padding:4px 12px;gap:0 6px;} #page-pedido .pr-n{font-size:16px;font-weight:600;} #page-pedido .pr-d{font-size:14px;} #page-pedido .pr-d b{font-size:16px;}
+    #page-pedido .pr-ed{width:52px;min-height:42px;font-size:18px;}
+    #page-pedido .drag-h{width:48px;height:auto;min-height:40px;font-size:22px;border-radius:0;}
+    #page-pedido .sec-ord .drag-h{height:34px;min-height:0;width:44px;border-radius:8px;}
+    #page-pedido .bar-sticky{padding:6px 0;} #page-pedido .bar-sticky .cnt{font-size:16px;} #page-pedido .bar-sticky .bt{min-height:46px;font-size:16px;}
+  }
+  /* ═══ Inventario en tablet: más compacto ═══ */
+  @media (min-width:601px){
+    body[data-page="inventario"] nav{min-height:52px;padding:6px 12px;} body[data-page="inventario"] .nav-tab{min-height:40px;padding:4px 14px;font-size:14px;border-radius:12px;}
+    #page-inventario.page{padding:8px 14px 96px;}
+    #page-inventario>.section-head{display:none;} #pan-root .section-head p{display:none;} #pan-root .section-head h2{margin:0;}
+    #pan-root>div:first-of-type .lbl{margin:0;} #pan-root>div:first-of-type .qchip{min-height:32px;font-size:13px;} #page-inventario .areabar{margin:0 0 6px;}
+    #page-inventario .areabar{margin:4px 0 8px;} #page-inventario .qchip{min-height:40px;padding:0 14px;font-size:14px;border-radius:12px;}
+    #page-inventario .lbl{font-size:12px;margin:2px 0 4px;}
+    #pan-root .qchip{min-height:36px;padding:0 12px;font-size:14px;}
+    #pan-root>.bt[data-a="home"]{min-height:38px;font-size:14px;padding:0 14px;border-radius:12px;} #pan-root .section-head h2{font-size:18px;}
+    .pan-grid{gap:10px;margin-top:4px;} .pan-card{min-height:0;padding:12px;gap:6px;border-width:2px;border-radius:16px;}
+    .pan-ct b{font-size:17px;} .pan-ct small{font-size:12px;} .pan-ic{font-size:28px;} .pan-ct .tag{padding:3px 9px;font-size:12px;}
+    .pan-p{font-size:14px;padding:5px 8px;gap:8px;} .pan-p span{width:22px;height:22px;font-size:12px;}
+    .pan-st b{font-size:22px;} .pan-st small{font-size:12px;} .pan-st>div{padding:6px 2px;}
+    .pan-disp{min-height:60px;padding:8px 14px;margin-top:10px;border-width:2px;border-radius:16px;} .pan-disp b{font-size:17px;} .pan-disp small{font-size:12px;}
+    .pan-steps{gap:6px;margin-bottom:8px;} .pan-step{min-height:44px;font-size:14px;padding:4px 10px;border-radius:12px;} .pan-step span{width:26px;height:26px;font-size:13px;}
+    .pan-row{min-height:50px;padding:5px 10px;margin-bottom:5px;border-radius:12px;gap:8px;} .pan-n{font-size:16px;} .pan-fx{font-size:12px;}
+    .pan-n .pnum{min-width:24px;font-size:13px;padding:0 5px;margin-right:6px;}
+    .pan-val{min-width:96px;min-height:42px;font-size:18px;border-radius:10px;} .pan-val small{font-size:11px;} .pan-val.big{min-height:52px;font-size:20px;}
+    .pan-val.sm{min-height:46px;} .pan-val.sm b{font-size:18px;} .pan-val.sm small{font-size:11px;}
+    .pan-c{width:72px;font-size:15px;} .pan-c.k{font-size:18px;}
+    #page-inventario .card{padding:10px 14px;border-radius:12px;margin-bottom:8px;} #page-inventario .bt{min-height:44px;font-size:15px;border-radius:12px;}
+    #page-inventario .bar-sticky{padding:6px 0;} #page-inventario .bar-sticky .cnt{font-size:16px;}
+    #page-inventario .pgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;} #page-inventario .pcard{min-height:110px;border-width:2px;border-radius:12px;} #page-inventario .pc-n{font-size:14px;} #page-inventario .pc-u{font-size:13px;}
+  }
   @media (max-width:900px){.pan-grid,.pan-steps{grid-template-columns:1fr;}.pan-4{flex-basis:100%}.pan-row.dist{flex-wrap:wrap}}
 </style>
 </head>
