@@ -644,6 +644,11 @@
     #page-inventario .bar-sticky{padding:6px 0;} #page-inventario .bar-sticky .cnt{font-size:16px;}
     #page-inventario .pgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;} #page-inventario .pcard{min-height:110px;border-width:2px;border-radius:12px;} #page-inventario .pc-n{font-size:14px;} #page-inventario .pc-u{font-size:13px;}
   }
+  .pan-hg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px;}
+  .pan-hb{display:flex;align-items:center;gap:8px;min-height:56px;padding:6px 10px;border:2px solid var(--bd);border-radius:12px;background:#fff;font-family:inherit;font-size:15px;font-weight:700;color:var(--black);text-align:left;cursor:pointer;}
+  .pan-hb .nm{flex:1;min-width:0;line-height:1.15;} .pan-hb b{font-size:22px;color:var(--ok);} .pan-hb i{font-style:normal;font-size:24px;color:var(--mu);}
+  .pan-hb.sel{border-color:var(--ok);background:var(--okbg);} .pan-hb .pnum{display:inline-block;min-width:24px;text-align:center;background:var(--ac);color:#fff;border-radius:8px;font-size:13px;padding:1px 5px;}
+  .pan-resp{border:2px solid var(--ac) !important;} .pan-resp .qchip{min-height:48px;font-size:16px;}
   @media (max-width:900px){.pan-grid,.pan-steps{grid-template-columns:1fr;}.pan-4{flex-basis:100%}.pan-row.dist{flex-wrap:wrap}}
 </style>
 </head>
@@ -3135,7 +3140,7 @@ function iniciarProd(){
 //  pan_distrib (destino de saldos)   · pan_historial (correcciones)    · pan_mp (catálogo) · pan_mp_mov · pan_mp_conteos
 // La producción NO se duplica: se lee de registros_produccion; las bajas se leen de `bajas`.
 // ═══════════════════════════════════════════════
-const PAN={prueba:false,real:{},test:{},vista:'home',paso:1,mpv:'lista',d:{conteos:[],movs:[],saldos:[],dist:[],reg:[],bajas:[],mp:[],mpmov:[],mpcont:[]},v:{cnt:{},dist:{},sal:null,hor:{pid:'',q:0},mpc:{},mpo:{obs:{}},sel:''},edit:{},unsubs:[]};
+const PAN={quien:'',hors:{},prueba:false,real:{},test:{},vista:'home',paso:1,mpv:'lista',d:{conteos:[],movs:[],saldos:[],dist:[],reg:[],bajas:[],mp:[],mpmov:[],mpcont:[]},v:{cnt:{},dist:{},sal:null,hor:{pid:'',q:0},mpc:{},mpo:{obs:{}},sel:''},edit:{},unsubs:[]};
 const PAN_COL={pan_conteos:'conteos',pan_movs:'movs',pan_saldos:'dist_x',pan_distrib:'dist',pan_mp:'mp',pan_mp_mov:'mpmov',pan_mp_conteos:'mpcont'};PAN_COL.pan_saldos='saldos';
 function panMerge(){Object.values(PAN_COL).forEach(k=>{const t=PAN.test[k]||{};PAN.d[k]=(PAN.real[k]||[]).filter(x=>!(x._id in t)).concat(Object.values(t));});}
 function pSet(ref,data,opt){   // en MODO PRUEBA nada llega a Firestore: se practica solo en esta pantalla
@@ -3151,8 +3156,12 @@ const panSum=(arr,f,g)=>r2(arr.filter(f).reduce((s,x)=>s+(Number(g(x))||0),0));
 const panHora=()=>new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
 const panProds=()=>(window.PRODREG?PRODREG.productos(PAN_AREA):[]);
 const panDiaAtras=n=>{const d=new Date(Date.now()-n*864e5);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
-function panOk(){if(!quien){showToast('⚠️ Elige quién registra');vib([40,30,40]);return false;}return true;}
-function panHist(col,id,anterior){const r=doc(collection(db,'pan_historial'));pSet(r,{coleccion:col,doc_id:id,anterior:anterior||null,por:quien,ts:Date.now(),fecha:serverTimestamp(),local:panCode(),dia:getHoy()}).catch(e=>console.error(e));}
+const PAN_MAN=['Erika Tepan','Joselinn Chichilima','Eimy Chico'];
+function panStaff(t){const base=(typeof encargadosDeLocal==='function'?encargadosDeLocal(dispositivo.local):[]);return t==='manana'?PAN_MAN:t==='tarde'?base:[...new Set([...PAN_MAN,...base])];}
+function panResp(t){const L=panStaff(t);return `<div class="card pan-resp" id="pan-resp"><div class="lbl">Responsable${t==='manana'?' del turno mañana':t==='tarde'?' del turno tarde':''}</div><div class="qrow">${L.map(n=>`<button class="qchip ${n===PAN.quien?'sel':''}" data-a="resp" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div></div>`;}
+function panFalta(){showToast('⚠️ Elige el responsable');vib([40,30,40]);const e=$('pan-resp');if(e)e.scrollIntoView({behavior:'smooth',block:'center'});}
+function panOk(){if(!PAN.quien){panFalta();return false;}return true;}
+function panHist(col,id,anterior){const r=doc(collection(db,'pan_historial'));pSet(r,{coleccion:col,doc_id:id,anterior:anterior||null,por:PAN.quien,ts:Date.now(),fecha:serverTimestamp(),local:panCode(),dia:getHoy()}).catch(e=>console.error(e));}
 function panGuardar(col,id,data,previo){
   if(previo)panHist(col,id,previo);
   return pSet(doc(db,col,id),data).catch(e=>{console.error(e);showToast('❌ No se pudo guardar');throw e;});
@@ -3197,9 +3206,9 @@ const MP_BASE=[['Harina de trigo','kg'],['Azúcar','kg'],['Huevos','unidades'],[
 // ── vistas ──
 function renderPan(){
   const r=$('pan-root');if(!r||!dispositivo)return;
-  const v=PAN.vista;let h=(PAN.prueba?`<div class="pan-prueba">🧪 MODO PRUEBA · nada se guarda de verdad. Al apagarlo se borra todo lo practicado.</div>`:'')+`<div style="display:flex;justify-content:space-between;align-items:center"><div class="lbl">¿Quién registra?</div><button class="qchip ${PAN.prueba?'sel':''}" data-a="prueba" style="min-height:40px">🧪 Modo prueba: ${PAN.prueba?'ENCENDIDO':'apagado'}</button></div><div class="qrow" id="pan-quien"></div>`;
+  const v=PAN.vista;let h=(PAN.prueba?`<div class="pan-prueba">🧪 MODO PRUEBA · nada se guarda de verdad. Al apagarlo se borra todo lo practicado.</div>`:'')+`<div style="display:flex;justify-content:flex-end"><button class="qchip ${PAN.prueba?'sel':''}" data-a="prueba" style="min-height:40px">🧪 Modo prueba: ${PAN.prueba?'ENCENDIDO':'apagado'}</button></div>`;
   if(v==='home')h+=panHome();else{h+=`<button class="bt" data-a="home" style="margin:8px 0 12px">‹ Panadería</button>`+(v==='mp'?panMP():v==='disp'?panDisp():(v==='sorpresa'||v==='base')?panConteo(v):panTurno(v));}
-  r.innerHTML=h;renderQuien('pan-quien');
+  r.innerHTML=h;
 }
 function panHome(){
   const tarj=(t,tit,hor,ic)=>{const e=panEstado(t),n=e.pasos.filter(Boolean).length,on=panEnCurso(t);
@@ -3253,15 +3262,16 @@ function panConteo(tipo){
   const n=ps.filter(p=>V[p.id]!==undefined).length;
   return `<div class="card" style="padding:12px 16px"><b>${tit}</b><div style="color:var(--mu);font-size:15px">${desc}</div></div>
     ${ps.length?ps.map((p,i)=>panCuentaFila(p,i,panCrudo(p),V[p.id],tipo)).join(''):'<div class="card vacio">No hay productos de Panadería producción. Créalos en Producción → Fichas.</div>'}
+    ${panResp()}
     <div class="bar-sticky"><div class="cnt">${n}/${ps.length}</div><button class="bt" data-a="disp-x">‹ Pan disponible</button><button class="bt ac" data-a="cnt-save" data-t="${tipo}" ${n===ps.length&&ps.length?'':'disabled'}>${tipo==='sorpresa'?'Guardar conteo sorpresa':'Fijar punto de partida'}</button></div>`;
 }
 async function panGuardarConteo(tipo){
   if(!panOk())return;const libre=tipo==='sorpresa'||tipo==='base',id=libre?`${panCode()}__${Date.now()}__${tipo}`:panConteoId(tipo),ps=panProds(),V=PAN.v.cnt,prev=libre?null:PAN.d.conteos.find(c=>c.id===id);
   const items=ps.map(p=>{const c=panCrudo(p),f=V[p.id];return {pid:p.id,nombre:p.nombre,unidad:p.unidad||'',inicial:c.ini,produccion:c.prod,bajas:c.baj,horneados:c.hor,esperado:tipo==='base'?null:c.esp,fisico:f,dif:tipo==='base'?0:r2(f-c.esp)};});
   const hay=items.some(i=>i.dif);
-  const data={id,local:panCode(),local_nombre:dispositivo.local,dia:prev?prev.dia:getHoy(),tipo,turno:libre?'':(tipo==='inicial'?'manana':'tarde'),ts:prev?prev.ts:Date.now(),fecha:serverTimestamp(),hora:panHora(),por:quien,items,hay_diferencias:hay,revision:hay?'pendiente':'ok',...(prev?{corregido_por:quien,corregido_ts:Date.now()}:{})};
+  const data={id,local:panCode(),local_nombre:dispositivo.local,dia:prev?prev.dia:getHoy(),tipo,turno:libre?'':(tipo==='inicial'?'manana':'tarde'),ts:prev?prev.ts:Date.now(),fecha:serverTimestamp(),hora:panHora(),por:PAN.quien,items,hay_diferencias:hay,revision:hay?'pendiente':'ok',...(prev?{corregido_por:PAN.quien,corregido_ts:Date.now()}:{})};
   try{await panGuardar('pan_conteos',id,data,prev);}catch(e){return;}
-  PAN.v.cnt={};delete PAN.edit[id];beep(988,.15);vib(40);if(libre){PAN.vista='disp';PAN.res=tipo==='sorpresa'?data:null;}showToast(tipo==='base'?'✅ Punto de partida fijado':hay?'✅ Guardado · hay diferencias para revisión':'✅ Conteo guardado');renderPan();
+  PAN.v.cnt={};delete PAN.edit[id];beep(988,.15);vib(40);if(libre){PAN.quien='';PAN.vista='disp';PAN.res=tipo==='sorpresa'?data:null;}showToast(tipo==='base'?'✅ Punto de partida fijado':hay?'✅ Guardado · hay diferencias para revisión':'✅ Conteo guardado');renderPan();
 }
 function panDist(){
   const id=`${panCode()}__${getHoy()}`,hecho=PAN.d.dist.find(x=>x.id===id),sp=panSaldoPrev();
@@ -3277,6 +3287,7 @@ function panDist(){
   return `<div class="card" style="padding:12px 16px"><b>Saldo de vitrina del ${esc(sp.dia)}</b><div style="color:var(--mu);font-size:15px">Reparte cada saldo. La reventa vuelve a estar disponible para vender (no es una venta). La suma debe ser igual al saldo.</div></div>
     ${items.map((i,n)=>{const ok=tot(D[i.pid])===i.cantidad;return `<div class="pan-row dist ${ok?'':'mal'}"><div class="pan-n"><span class="pnum">${n+1}</span>${esc(i.nombre)}<div class="pan-fx">Saldo: <b>${fmtN(i.cantidad)}</b> ${ok?'<span style="color:var(--ok)">✓ cuadra</span>':'<span style="color:var(--er)">suma '+fmtN(tot(D[i.pid]))+'</span>'}</div></div>
       <div class="pan-4">${bt(i,'reventa','Reventa')}${bt(i,'promocion','Promoción')}${bt(i,'consumo','Consumo interno')}${bt(i,'bajas','Bajas')}</div></div>`;}).join('')}
+    ${panResp('manana')}
     <div class="bar-sticky"><div class="cnt">${malos?malos+' sin cuadrar':'Todo cuadra'}</div><button class="bt ac" data-a="dist-save" ${malos?'disabled':''}>Confirmar distribución</button></div>`;
 }
 async function panGuardarDist(){
@@ -3286,30 +3297,31 @@ async function panGuardarDist(){
   if(items.some(i=>r2(i.reventa+i.promocion+i.consumo+i.bajas)!==i.saldo)){showToast('⚠️ La suma no coincide con el saldo');return;}
   const ts=Date.now(),hora=panHora();
   try{
-    await panGuardar('pan_distrib',id,{id,local:code,local_nombre:dispositivo.local,dia,turno:'manana',saldo_dia:sp.dia,items,por:quien,hora,ts,fecha:serverTimestamp()});
+    await panGuardar('pan_distrib',id,{id,local:code,local_nombre:dispositivo.local,dia,turno:'manana',saldo_dia:sp.dia,items,por:PAN.quien,hora,ts,fecha:serverTimestamp()});
     for(const i of items)for(const [k,tp] of [['reventa','vitrina_reventa'],['promocion','vitrina_promocion'],['consumo','vitrina_consumo'],['bajas','vitrina_baja']]){
       if(!i[k])continue;const mid=`${id}__${i.pid}__${k}`;
-      pSet(doc(db,'pan_movs',mid),{id:mid,local:code,dia,ts,fecha:serverTimestamp(),tipo:tp,turno:'manana',pid:i.pid,nombre:i.nombre,unidad:i.unidad,cantidad:i[k],por:quien,hora,distrib_id:id,anulado:false}).catch(e=>console.error(e));
-      if(k==='bajas')pSet(doc(db,'bajas',`${id}__${i.pid}`),{tipo:'baja',local:dispositivo.local,enc:quien,estacion:'Panadería',prod:i.nombre,cant:i.bajas,unid:i.unidad,motivo:'Sobrante de vitrina',obs:'Distribución de saldos (pan horneado)',fecha:serverTimestamp(),origen:'inv_panaderia',pan_distrib:id}).catch(e=>console.error(e));
+      pSet(doc(db,'pan_movs',mid),{id:mid,local:code,dia,ts,fecha:serverTimestamp(),tipo:tp,turno:'manana',pid:i.pid,nombre:i.nombre,unidad:i.unidad,cantidad:i[k],por:PAN.quien,hora,distrib_id:id,anulado:false}).catch(e=>console.error(e));
+      if(k==='bajas')pSet(doc(db,'bajas',`${id}__${i.pid}`),{tipo:'baja',local:dispositivo.local,enc:PAN.quien,estacion:'Panadería',prod:i.nombre,cant:i.bajas,unid:i.unidad,motivo:'Sobrante de vitrina',obs:'Distribución de saldos (pan horneado)',fecha:serverTimestamp(),origen:'inv_panaderia',pan_distrib:id}).catch(e=>console.error(e));
     }
-    PAN.v.dist={};beep(988,.15);vib(40);showToast('✅ Distribución confirmada');renderPan();
+    PAN.v.dist={};PAN.quien='';PAN.vista='home';beep(988,.15);vib(40);showToast('✅ Distribución confirmada');renderPan();
   }catch(e){}
 }
 function panHor(t){
-  const ps=panProds(),H=PAN.v.hor,dia=getHoy();if(!H.pid&&ps[0])H.pid=ps[0].id;
-  const p=ps.find(x=>x.id===H.pid),c=p?panCrudo(p):null;
+  const ps=panProds(),Hs=PAN.hors,dia=getHoy(),n=Object.keys(Hs).length,tot=r2(Object.values(Hs).reduce((a,b)=>a+b,0));
   const lista=PAN.d.movs.filter(m=>m.tipo==='horneado'&&m.dia===dia).sort((a,b)=>b.ts-a.ts);
-  return `<div class="card"><div class="lbl">Producto</div><select class="form-control" id="pan-hsel" style="min-height:60px;font-size:19px">${ps.map((x,i)=>`<option value="${esc(x.id)}" ${x.id===H.pid?'selected':''}>${i+1}. ${esc(x.nombre)}</option>`).join('')}</select>
-    <div class="lbl" style="margin-top:8px">Cantidad horneada</div><button class="pan-val big" data-a="hor-q">${H.q?fmtN(H.q):'Toca para escribir'} <small>${esc(p?p.unidad||'':'')}</small></button>
-    <button class="bt ok" data-a="hor-save" style="width:100%;margin-top:12px" ${H.q>0&&p?'':'disabled'}>Registrar horneado</button></div>
+  return `<div class="card" style="padding:10px 14px"><b>Registro de horneados</b><div style="color:var(--mu);font-size:15px">Toca cada pan que horneaste y escribe la cantidad. Marca todos los que necesites y regístralos juntos al final.</div></div>
+    <div class="pan-hg">${ps.map((x,i)=>`<button class="pan-hb ${Hs[x.id]?'sel':''}" data-a="hp" data-pid="${esc(x.id)}"><span class="pnum">${i+1}</span><span class="nm">${esc(x.nombre)}</span>${Hs[x.id]?`<b>${fmtN(Hs[x.id])}</b>`:'<i>+</i>'}</button>`).join('')}</div>
+    ${panResp(t)}
     <div class="lbl">Horneados de hoy (ambos turnos)</div>
-    ${lista.length?lista.map(m=>`<div class="pan-row ${m.anulado?'anul':''}"><div class="pan-n">${esc(m.nombre)}<div class="pan-fx">${esc(m.hora||'')} · ${m.turno==='manana'?'Mañana':'Tarde'} · ${esc(m.por||'')}${m.anulado?' · ANULADO por '+esc(m.anulado_por||''):''}</div></div><b style="font-size:22px">${fmtN(m.cantidad)}</b>${m.anulado?'':`<button class="pr-x" data-a="hor-del" data-id="${esc(m._id)}">✕</button>`}</div>`).join(''):'<div class="card vacio">Aún no hay horneados hoy.</div>'}`;
+    ${lista.length?lista.map(m=>`<div class="pan-row ${m.anulado?'anul':''}"><div class="pan-n">${esc(m.nombre)}<div class="pan-fx">${esc(m.hora||'')} · ${m.turno==='manana'?'Mañana':'Tarde'} · ${esc(m.por||'')}${m.anulado?' · ANULADO por '+esc(m.anulado_por||''):''}</div></div><b style="font-size:22px">${fmtN(m.cantidad)}</b>${m.anulado?'':`<button class="pr-x" data-a="hor-del" data-id="${esc(m._id)}">✕</button>`}</div>`).join(''):'<div class="card vacio">Aún no hay horneados hoy.</div>'}
+    <div class="bar-sticky"><div class="cnt">${n} pan${n===1?'':'es'} · ${fmtN(tot)} u.</div><button class="bt ok" data-a="hor-save" ${n?'':'disabled'}>Registrar horneados</button></div>`;
 }
 function panGuardarHor(t){
-  if(!panOk())return;const H=PAN.v.hor,p=panProds().find(x=>x.id===H.pid);if(!p||!(H.q>0))return;
-  const c=panCrudo(p),ref=doc(collection(db,'pan_movs')),ts=Date.now();
-  pSet(ref,{id:ref.id,local:panCode(),local_nombre:dispositivo.local,dia:getHoy(),ts,fecha:serverTimestamp(),hora:panHora(),tipo:'horneado',turno:t,pid:p.id,nombre:p.nombre,unidad:p.unidad||'',cantidad:H.q,por:quien,anulado:false}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar');});
-  beep(988,.12);vib(30);showToast('✅ Horneado registrado');H.q=0;renderPan();
+  const Hs=PAN.hors,ids=Object.keys(Hs);if(!ids.length)return;if(!panOk())return;
+  const ps=panProds(),ts=Date.now(),hora=panHora(),lote='h'+ts;let k=0;
+  ids.forEach(pid=>{const p=ps.find(x=>x.id===pid);if(!p||!(Hs[pid]>0))return;const ref=doc(collection(db,'pan_movs'));k++;
+    pSet(ref,{id:ref.id,local:panCode(),local_nombre:dispositivo.local,dia:getHoy(),ts:ts+k,fecha:serverTimestamp(),hora,tipo:'horneado',turno:t,pid:p.id,nombre:p.nombre,unidad:p.unidad||'',cantidad:Hs[pid],por:PAN.quien,lote,anulado:false}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar');});});
+  PAN.hors={};PAN.quien='';PAN.vista='home';beep(988,.15);vib(40);showToast(`✅ ${k} horneado${k===1?'':'s'} registrado${k===1?'':'s'}`);renderPan();
 }
 function panSaldos(){
   const id=`${panCode()}__${getHoy()}`,hecho=PAN.d.saldos.find(s=>s.id===id),ps=panProds();
@@ -3317,13 +3329,14 @@ function panSaldos(){
   const S=PAN.v.sal;
   return `<div class="card" style="padding:12px 16px"><b>Saldo final de vitrina</b><div style="color:var(--mu);font-size:15px">Solo cuenta los panes horneados que quedaron sin vender. Lo que no escribas se guarda en 0.${hecho?' <b style="color:var(--ok)">Ya guardado por '+esc(hecho.por)+' a las '+esc(hecho.hora)+' (puedes corregirlo).</b>':''}</div></div>
     ${ps.map((p,i)=>`<div class="pan-row ${S[p.id]!==undefined?'hecho':''}"><div class="pan-n"><span class="pnum">${i+1}</span>${esc(p.nombre)}</div><button class="pan-val" data-a="sal" data-pid="${esc(p.id)}">${S[p.id]===undefined?'—':fmtN(S[p.id])} <small>${esc(p.unidad||'')}</small></button></div>`).join('')}
+    ${panResp('tarde')}
     <div class="bar-sticky"><div class="cnt">${Object.values(S).filter(v=>v>0).length} con saldo</div><button class="bt ac" data-a="sal-save">Guardar saldos</button></div>`;
 }
 async function panGuardarSaldos(){
   if(!panOk())return;const code=panCode(),dia=getHoy(),id=`${code}__${dia}`,prev=PAN.d.saldos.find(s=>s.id===id),S=PAN.v.sal||{};
   const items=panProds().map(p=>({pid:p.id,nombre:p.nombre,unidad:p.unidad||'',cantidad:S[p.id]||0}));
-  try{await panGuardar('pan_saldos',id,{id,local:code,local_nombre:dispositivo.local,dia,turno:'tarde',items,por:quien,hora:panHora(),ts:prev?prev.ts:Date.now(),fecha:serverTimestamp(),...(prev?{corregido_por:quien,corregido_ts:Date.now()}:{})},prev);}catch(e){return;}
-  beep(988,.15);vib(40);showToast('✅ Saldos guardados · pasan al turno mañana siguiente');renderPan();
+  try{await panGuardar('pan_saldos',id,{id,local:code,local_nombre:dispositivo.local,dia,turno:'tarde',items,por:PAN.quien,hora:panHora(),ts:prev?prev.ts:Date.now(),fecha:serverTimestamp(),...(prev?{corregido_por:PAN.quien,corregido_ts:Date.now()}:{})},prev);}catch(e){return;}
+  PAN.quien='';PAN.v.sal=null;PAN.vista='home';beep(988,.15);vib(40);showToast('✅ Saldos guardados · pasan al turno mañana siguiente');renderPan();
 }
 // ── materia prima ──
 function panMP(){
@@ -3340,7 +3353,7 @@ function panMP(){
   }else if(v==='salida'){
     const S=PAN.v.sel||(mp[0]&&mp[0]._id)||'',sel=mp.find(m=>m._id===S),dia=getHoy(),Q=PAN.v.mpq||0;
     const lista=PAN.d.mpmov.filter(x=>x.tipo==='salida_masa'&&x.dia===dia).sort((a,b)=>b.ts-a.ts);
-    h+=`<div class="card"><div class="lbl">Insumo que sale para masas</div><select class="form-control" id="pan-mpsel" style="min-height:60px;font-size:19px">${mp.map(m=>`<option value="${esc(m._id)}" ${m._id===S?'selected':''}>${esc(m.nombre)} (${fmtN(mpCant(m))} ${esc(m.unidad||'')})</option>`).join('')}</select>
+    h+=panResp()+`<div class="card"><div class="lbl">Insumo que sale para masas</div><select class="form-control" id="pan-mpsel" style="min-height:60px;font-size:19px">${mp.map(m=>`<option value="${esc(m._id)}" ${m._id===S?'selected':''}>${esc(m.nombre)} (${fmtN(mpCant(m))} ${esc(m.unidad||'')})</option>`).join('')}</select>
       <div class="lbl" style="margin-top:10px">Cantidad</div><button class="pan-val big" data-a="mp-q">${Q?fmtN(Q):'Toca para escribir'} <small>${esc(sel?sel.unidad||'':'')}</small></button>
       <button class="bt ok" data-a="mp-sal" style="width:100%;margin-top:12px" ${Q>0&&sel?'':'disabled'}>Registrar salida</button></div>
       <div class="lbl">Salidas de hoy</div>${lista.length?lista.map(x=>`<div class="pan-row ${x.anulado?'anul':''}"><div class="pan-n">${esc(x.nombre)}<div class="pan-fx">${esc(x.hora||'')} · ${esc(x.por||'')}${x.anulado?' · ANULADO':''}</div></div><b style="font-size:22px">${fmtN(-x.cantidad)} ${esc(x.unidad||'')}</b>${x.anulado?'':`<button class="pr-x" data-a="mp-del" data-id="${esc(x._id)}">✕</button>`}</div>`).join(''):'<div class="card vacio">Sin salidas hoy.</div>'}`;
@@ -3349,7 +3362,7 @@ function panMP(){
     h+=`<div class="card" style="padding:12px 16px"><b>Conteo físico</b><div style="color:var(--mu);font-size:15px">Escribe lo que realmente hay. Si no coincide con el sistema, queda como diferencia para revisión (no se ajusta solo).</div></div>`+
     mp.map(m=>{const f=C[m._id],dif=f===undefined?null:r2(f-mpCant(m));return `<div class="pan-row ${f!==undefined?'hecho':''}"><div class="pan-n">${esc(m.nombre)}<div class="pan-fx">Sistema: <b>${fmtN(mpCant(m))}</b> ${esc(m.unidad||'')}</div>${dif?`<input class="form-control mp-obs" data-id="${esc(m._id)}" placeholder="Observación de la diferencia…" value="${esc(PAN.v.mpo.obs[m._id]||'')}" style="margin-top:6px;min-height:44px">`:''}</div>
       ${dif!==null?`<span class="tag ${dif===0?'ok':'er'}">${dif===0?'✓':(dif>0?'+':'')+fmtN(dif)}</span>`:''}<button class="pan-val" data-a="mp-c" data-id="${esc(m._id)}">${f===undefined?'Contar':fmtN(f)} <small>${esc(m.unidad||'')}</small></button></div>`;}).join('')+
-    `<div class="bar-sticky"><div class="cnt">${n}/${mp.length}</div><button class="bt ac" data-a="mp-c-save" ${n?'':'disabled'}>Guardar conteo</button></div>`;
+    panResp()+`<div class="bar-sticky"><div class="cnt">${n}/${mp.length}</div><button class="bt ac" data-a="mp-c-save" ${n?'':'disabled'}>Guardar conteo</button></div>`;
   }
   return h;
 }
@@ -3368,12 +3381,12 @@ function panMpGuardar(id){
   const nom=$('pm-nom').value.trim();if(!nom){showToast('⚠️ Escribe el nombre');return;}
   const idn=id||'mp_'+panNorm(nom).replace(/[^a-z0-9]+/g,'_')+'_'+panCode(),cat=CAT.find(p=>panNorm(p.nombre)===panNorm(nom)),prev=PAN.d.mp.find(m=>m._id===idn);
   if(!id&&prev&&prev.activo!==false){showToast('⚠️ Ya existe esa materia prima');return;}
-  pSet(doc(db,'pan_mp',idn),{local:panCode(),nombre:nom,codigo:$('pm-cod').value.trim(),unidad:$('pm-uni').value,minimo:parseFloat(String($('pm-min').value).replace(',','.'))||0,producto_id:cat?cat.id:(prev&&prev.producto_id)||'',activo:true,actualizado:serverTimestamp(),por:quien||''},{merge:true}).catch(e=>console.error(e));
+  pSet(doc(db,'pan_mp',idn),{local:panCode(),nombre:nom,codigo:$('pm-cod').value.trim(),unidad:$('pm-uni').value,minimo:parseFloat(String($('pm-min').value).replace(',','.'))||0,producto_id:cat?cat.id:(prev&&prev.producto_id)||'',activo:true,actualizado:serverTimestamp(),por:PAN.quien||''},{merge:true}).catch(e=>console.error(e));
   panModalCerrar();showToast('✅ Guardado');vib();
 }
 function panMov(tipo,m,cant,extra){
   const ref=doc(collection(db,'pan_mp_mov'));
-  return pSet(ref,{id:ref.id,local:panCode(),local_nombre:dispositivo.local,dia:getHoy(),ts:Date.now(),fecha:serverTimestamp(),hora:panHora(),tipo,mp_id:m._id,nombre:m.nombre,codigo:m.codigo||'',unidad:m.unidad||'',cantidad:cant,por:quien,anulado:false,
+  return pSet(ref,{id:ref.id,local:panCode(),local_nombre:dispositivo.local,dia:getHoy(),ts:Date.now(),fecha:serverTimestamp(),hora:panHora(),tipo,mp_id:m._id,nombre:m.nombre,codigo:m.codigo||'',unidad:m.unidad||'',cantidad:cant,por:PAN.quien,anulado:false,
     receta_id:null,producto_destino_id:null,...(extra||{})}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar');});   // receta_id: listo para cálculo automático por recetas (aún no se usa)
 }
 // ── acciones (un solo listener) ──
@@ -3386,8 +3399,8 @@ function panClick(e){
     case 'res-x':PAN.res=null;break;
     case 'sorp':PAN.vista='sorpresa';PAN.v.cnt={};break;
     case 'base':openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}PAN.vista='base';PAN.v.cnt={};renderPan();});return;
-    case 'home':PAN.vista='home';PAN.v.cnt={};PAN.v.dist={};PAN.v.sal=null;break;
-    case 'go':PAN.res=null;PAN.vista=d.v;PAN.paso=1;PAN.v.cnt={};PAN.v.dist={};PAN.v.sal=null;PAN.mpv='lista';break;
+    case 'home':PAN.vista='home';PAN.hors={};PAN.v.cnt={};PAN.v.dist={};PAN.v.sal=null;break;
+    case 'go':PAN.res=null;PAN.hors={};PAN.vista=d.v;PAN.paso=1;PAN.v.cnt={};PAN.v.dist={};PAN.v.sal=null;PAN.mpv='lista';break;
     case 'paso':PAN.paso=+d.n;PAN.v.cnt={};PAN.v.sal=null;break;
     case 'cnt':{const p=pr(d.pid);if(!p)return;const c=panCrudo(p);openKeypad(p.nombre,PAN.v.cnt[p.id],v=>{PAN.v.cnt[p.id]=v;renderPan();},p.unidad);return;}
     case 'cnt-esp':panProds().forEach(p=>{if(PAN.v.cnt[p.id]===undefined)PAN.v.cnt[p.id]=Math.max(0,panCrudo(p).esp);});break;
@@ -3397,9 +3410,11 @@ function panClick(e){
     case 'ej-saldo':{if(!PAN.prueba)return;const ay=panDiaAtras(1),n=[10,5,3,2,6,4,1,8];panProds().slice(0,8).forEach(()=>0);
       pSet(doc(db,'pan_saldos',`${panCode()}__${ay}`),{id:`${panCode()}__${ay}`,local:panCode(),dia:ay,turno:'tarde',por:'Ejemplo',hora:'20:45',ts:Date.now()-864e5,items:panProds().slice(0,8).map((p,i)=>({pid:p.id,nombre:p.nombre,unidad:p.unidad||'',cantidad:n[i]}))});PAN.v.dist={};showToast('🧪 Saldos de ayer de ejemplo creados');return;}
     case 'dist-save':panGuardarDist();return;
+    case 'resp':PAN.quien=d.n;break;
+    case 'hp':{const p=pr(d.pid);if(!p)return;openKeypad(p.nombre,PAN.hors[p.id],v=>{if(v>0)PAN.hors[p.id]=v;else delete PAN.hors[p.id];renderPan();},p.unidad);return;}
     case 'hor-q':{const p=pr(PAN.v.hor.pid);openKeypad(p?p.nombre:'Cantidad',PAN.v.hor.q,v=>{PAN.v.hor.q=v;renderPan();},p&&p.unidad);return;}
     case 'hor-save':panGuardarHor(PAN.vista);return;
-    case 'hor-del':{const m=PAN.d.movs.find(x=>x._id===d.id);if(!m||!panOk())return;pSet(doc(db,'pan_movs',m._id),{anulado:true,anulado_por:quien,anulado_ts:Date.now()},{merge:true}).catch(e=>console.error(e));showToast('Horneado anulado (queda en el historial)');return;}
+    case 'hor-del':{const m=PAN.d.movs.find(x=>x._id===d.id);if(!m||!panOk())return;pSet(doc(db,'pan_movs',m._id),{anulado:true,anulado_por:PAN.quien,anulado_ts:Date.now()},{merge:true}).catch(e=>console.error(e));showToast('Horneado anulado (queda en el historial)');return;}
     case 'sal':{const p=pr(d.pid);openKeypad(p.nombre,PAN.v.sal[p.id],v=>{PAN.v.sal[p.id]=v;renderPan();},p.unidad);return;}
     case 'sal-save':panGuardarSaldos();return;
     case 'mpv':PAN.mpv=d.v;break;
@@ -3413,16 +3428,16 @@ function panClick(e){
     case 'mp-sal':{if(!panOk())return;const m=mpActivos().find(x=>x._id===PAN.v.sel)||mpActivos()[0];if(!m||!(PAN.v.mpq>0))return;
       if(PAN.v.mpq>mpCant(m))showToast('⚠️ El sistema tenía '+fmtN(mpCant(m))+' '+(m.unidad||''));
       panMov('salida_masa',m,-PAN.v.mpq,{turno:panEnCurso('manana')&&!panEnCurso('tarde')?'manana':(panEnCurso('tarde')&&!panEnCurso('manana')?'tarde':'')});PAN.v.mpq=0;beep(988,.12);vib(30);break;}
-    case 'mp-del':{const x=PAN.d.mpmov.find(y=>y._id===d.id);if(!x||!panOk())return;pSet(doc(db,'pan_mp_mov',x._id),{anulado:true,anulado_por:quien,anulado_ts:Date.now()},{merge:true}).catch(er=>console.error(er));showToast('Salida anulada (queda en el historial)');return;}
+    case 'mp-del':{const x=PAN.d.mpmov.find(y=>y._id===d.id);if(!x||!panOk())return;pSet(doc(db,'pan_mp_mov',x._id),{anulado:true,anulado_por:PAN.quien,anulado_ts:Date.now()},{merge:true}).catch(er=>console.error(er));showToast('Salida anulada (queda en el historial)');return;}
     case 'mp-c':{const m=PAN.d.mp.find(x=>x._id===d.id);openKeypad(m.nombre,PAN.v.mpc[m._id],v=>{PAN.v.mpc[m._id]=v;renderPan();},m.unidad);return;}
     case 'mp-c-save':{if(!panOk())return;const C=PAN.v.mpc,ts=Date.now();let nd=0;
       mpActivos().forEach(m=>{const f=C[m._id];if(f===undefined)return;const sis=mpCant(m),dif=r2(f-sis);if(dif)nd++;
-        pSet(doc(db,'pan_mp_conteos',`${ts}__${m._id}`),{local:panCode(),dia:getHoy(),ts,fecha:serverTimestamp(),hora:panHora(),mp_id:m._id,nombre:m.nombre,unidad:m.unidad||'',sistema:sis,fisico:f,dif,obs:PAN.v.mpo.obs[m._id]||'',estado:dif?'por_revisar':'ok',por:quien}).catch(er=>console.error(er));});
+        pSet(doc(db,'pan_mp_conteos',`${ts}__${m._id}`),{local:panCode(),dia:getHoy(),ts,fecha:serverTimestamp(),hora:panHora(),mp_id:m._id,nombre:m.nombre,unidad:m.unidad||'',sistema:sis,fisico:f,dif,obs:PAN.v.mpo.obs[m._id]||'',estado:dif?'por_revisar':'ok',por:PAN.quien}).catch(er=>console.error(er));});
       PAN.v.mpc={};PAN.v.mpo.obs={};beep(988,.15);vib(40);showToast(nd?`✅ Guardado · ${nd} diferencia${nd>1?'s':''} por revisar`:'✅ Conteo guardado, todo coincide');PAN.mpv='lista';break;}
     case 'mp-aj':{const x=PAN.d.mpcont.find(y=>y._id===d.id);if(!x)return;
       openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}if(!panOk())return;
         const m=PAN.d.mp.find(y=>y._id===x.mp_id);if(!m)return;panMov('ajuste_conteo',m,x.dif,{conteo_id:x._id,obs:x.obs||''});
-        pSet(doc(db,'pan_mp_conteos',x._id),{estado:'ajustado',ajustado_por:quien,ajustado_ts:Date.now()},{merge:true}).catch(er=>console.error(er));showToast('✅ Ajuste aplicado (queda registrado)');});return;}
+        pSet(doc(db,'pan_mp_conteos',x._id),{estado:'ajustado',ajustado_por:PAN.quien,ajustado_ts:Date.now()},{merge:true}).catch(er=>console.error(er));showToast('✅ Ajuste aplicado (queda registrado)');});return;}
   }
   renderPan();
 }
