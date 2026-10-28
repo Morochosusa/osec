@@ -629,6 +629,34 @@
     .rx-list{grid-template-columns:1fr 1fr 1fr}
   }
 
+
+  /* ═══ MENÚ LATERAL EN TELÉFONO (≤ 600 px): hamburguesa + cajón con módulos agrupados, íconos y distintivos. En tablet / iPad siguen las pestañas ═══ */
+  .nav-burger,#drw,#drw-back{display:none}
+  @media (max-width:600px){
+    .nav-tabs{display:none !important}
+    .nav-burger{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:46px;height:46px;border:none;border-radius:14px;background:#f4f2ec;font-size:22px;color:var(--black);cursor:pointer;margin-right:8px}
+    .nav-burger:active{transform:scale(.95)}
+    nav .nav-brand{flex:1;min-width:0} nav .nav-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #drw-back{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:390;opacity:0;pointer-events:none;transition:opacity .2s}
+    #drw{display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;width:min(86vw,340px);background:#fff;z-index:400;transform:translateX(-102%);transition:transform .22s ease;box-shadow:2px 0 18px rgba(0,0,0,.25);padding-top:env(safe-area-inset-top);overflow:hidden}
+    body.drw-open #drw{transform:none} body.drw-open #drw-back{opacity:1;pointer-events:auto} body.drw-open{overflow:hidden}
+    .drw-head{display:flex;align-items:center;gap:10px;padding:14px 10px 12px;border-bottom:1px solid var(--bd)}
+    .drw-head .nav-burger{margin-right:0}
+    .drw-logo{width:46px;height:46px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto} .drw-logo img{width:100%;height:100%;object-fit:cover}
+    .drw-tt{min-width:0} .drw-tt b{display:block;font-size:20px} .drw-tt small{display:block;color:var(--mu);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #drw-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(60px + env(safe-area-inset-bottom))}
+    .drw-i{display:flex;align-items:center;gap:16px;width:100%;min-height:60px;padding:8px 16px;border:none;background:none;font-family:inherit;font-size:18px;color:var(--black);text-align:left;cursor:pointer;position:relative}
+    .drw-i.sub{padding-left:44px} .drw-i.act{background:var(--acbg);color:var(--ac);font-weight:700} .drw-i.off{opacity:.5}
+    .drw-i:active{background:var(--s2)}
+    .drw-ic{font-size:28px;width:34px;text-align:center;flex:0 0 auto;position:relative}
+    .drw-tx{flex:1;min-width:0}
+    .drw-bd{font-style:normal;position:absolute;left:34px;top:6px;min-width:22px;height:22px;border-radius:11px;background:#c0392b;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px}
+    .drw-i.sub .drw-bd{left:60px}
+    .drw-g{display:flex;align-items:center;gap:16px;padding:12px 16px 6px;margin-top:4px;border-top:1px solid var(--bd);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu)}
+    .drw-g span:first-child{font-size:28px;width:34px;text-align:center;letter-spacing:0}
+    #drw-list .drw-g:first-child{border-top:none}
+  }
+
   /* integración en Morochos OS */
   #page-prod{max-width:none;padding:0;}
   #pr-root{height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px;}
@@ -778,6 +806,7 @@
 </div>
 
 <nav>
+  <button class="nav-burger" id="nav-burger" aria-label="Menú" aria-expanded="false">☰</button>
   <div class="nav-brand">
     <img src="logo_morochos.png" alt="Morochos">
     <span>Morochos OS EC</span>
@@ -785,6 +814,15 @@
   <div class="nav-tabs" id="nav-tabs"></div>
   <span class="chip-net on" id="chip-net">● En línea</span><button class="chip-snd" id="chip-snd" aria-label="Sonido">🔊</button><button class="chip-snd" id="chip-cfg" aria-label="Ajustes de productos" title="Nombres y fotos de productos">⚙</button>
 </nav>
+
+<!-- Menú lateral (solo teléfono): reemplaza las pestañas de arriba -->
+<div id="drw-back"></div>
+<aside id="drw" aria-label="Menú de módulos" aria-hidden="true">
+  <div class="drw-head"><button class="nav-burger on" id="drw-close" aria-label="Cerrar menú">☰</button>
+    <div class="drw-logo"><img src="logo_morochos.png" alt=""></div>
+    <div class="drw-tt"><b>Morochos</b><small id="drw-sub">Morochos OS EC</small></div></div>
+  <div id="drw-list"></div>
+</aside>
 
 <!-- ═══ BAJAS ═══ -->
 <div class="page" id="page-bajas">
@@ -4208,6 +4246,36 @@ window.rxIniciar = function(){ R.ready = false; try { Object.keys(R.nw).forEach(
 window.rxRefresh = refrescar;
 window.RXS = R;
 })(RX_A, rxCompat(db));
+
+// ═══ Menú lateral del teléfono ═══
+const DRW_ORDEN=[{ids:['clock','check','pedido']},{ic:'📥',t:'Recepción',ids:['porrecibir','recepcion']},{ic:'🏭',t:'Producción',ids:['prod','bajas']},{ids:['inventario','equipo','tips','guia']}];
+function drwItem(id,sub){
+  if(!TABS.includes(id))return '';
+  const full=TAB_LABEL[id]||id,ic=full.split(' ')[0],tx=id==='recepcion'?'Recepción de productos':full.slice(full.indexOf(' ')+1),on=MODULOS_ACTIVOS.includes(id),b=document.getElementById('tab-'+id),n=b&&b.dataset.n;
+  return `<button class="drw-i${sub?' sub':''}${document.body.dataset.page===id?' act':''}${on?'':' off'}" data-id="${id}"><span class="drw-ic">${ic}</span><span class="drw-tx">${tx}</span>${on?'':'<small>🔒</small>'}${n?`<i class="drw-bd">${n}</i>`:''}</button>`;
+}
+function drwBuild(){
+  const L=document.getElementById('drw-list');if(!L)return;
+  let h='';
+  DRW_ORDEN.forEach(g=>{
+    if(g.t){const its=g.ids.filter(i=>TABS.includes(i));if(!its.length)return;h+=`<div class="drw-g"><span>${g.ic}</span><span>${g.t}</span></div>`+its.map(i=>drwItem(i,true)).join('');}
+    else h+=g.ids.map(i=>drwItem(i,false)).join('');
+  });
+  L.innerHTML=h;
+  const s=document.getElementById('drw-sub');if(s)s.textContent='Morochos OS EC'+(dispositivo&&dispositivo.local?' · '+dispositivo.local:'');
+}
+function drwAbrir(v){
+  if(v){drwBuild();}
+  document.body.classList.toggle('drw-open',!!v);
+  const d=document.getElementById('drw');if(d)d.setAttribute('aria-hidden',v?'false':'true');
+  const b=document.getElementById('nav-burger');if(b)b.setAttribute('aria-expanded',v?'true':'false');
+}
+document.getElementById('nav-burger').addEventListener('click',()=>{vib(10);drwAbrir(true);});
+document.getElementById('drw-close').addEventListener('click',()=>drwAbrir(false));
+document.getElementById('drw-back').addEventListener('click',()=>drwAbrir(false));
+document.getElementById('drw-list').addEventListener('click',e=>{const b=e.target.closest('.drw-i');if(!b)return;vib(10);drwAbrir(false);showPage(b.dataset.id);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')drwAbrir(false);});
+window.addEventListener('resize',()=>{if(window.innerWidth>600)drwAbrir(false);});
 </script>
 <script>
 // Permite instalar la app (acceso directo con logo) y abrirla sin el navegador
