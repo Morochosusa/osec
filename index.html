@@ -631,6 +631,7 @@
 
 
   /* ═══ MENÚ LATERAL EN TELÉFONO (≤ 600 px): hamburguesa + cajón con módulos agrupados, íconos y distintivos. En tablet / iPad siguen las pestañas ═══ */
+  .nav-tab.solo-ico{min-width:52px;padding:8px 12px;font-size:22px;line-height:1}
   .nav-burger,#drw,#drw-back{display:none}
   @media (max-width:600px){
     .nav-tabs{display:none !important}
@@ -648,6 +649,7 @@
     .drw-i{display:flex;align-items:center;gap:16px;width:100%;min-height:60px;padding:8px 16px;border:none;background:none;font-family:inherit;font-size:18px;color:var(--black);text-align:left;cursor:pointer;position:relative}
     .drw-i.sub{padding-left:44px} .drw-i.act{background:var(--acbg);color:var(--ac);font-weight:700} .drw-i.off{opacity:.5}
     .drw-i:active{background:var(--s2)}
+    .drw-i.ico{justify-content:flex-start;border-top:1px solid var(--bd);margin-top:6px}
     .drw-ic{font-size:28px;width:34px;text-align:center;flex:0 0 auto;position:relative}
     .drw-tx{flex:1;min-width:0}
     .drw-bd{font-style:normal;position:absolute;left:34px;top:6px;min-width:22px;height:22px;border-radius:11px;background:#c0392b;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px}
@@ -1931,7 +1933,7 @@ const unicos = a => [...new Set(a)];
 const LISTA_PAN_VENTA = unicos([...PRODUCTOS_PROD.map(sinTanda),'Pan chola','Arepa','Pan de bono','Pan de leche','Pan de chocolate','Muffin','Cheesecake']);
 const LISTA_CAFETERIA = ['Morocho 10oz','Morocho 16oz','Chocolate 10oz','Chocolate 16oz','Avena piña 10oz','Avena piña 16oz','Avena leche 10oz','Avena leche 16oz','Café filtrado','Avena fría 16oz','Capuchino','Latte','Moccacino','Jugo','Batido','Smoothie','Extracto','Manzana verde','Manzana roja','Pepino','Naranja','Piña picada','Jengibre','Espinaca','Kale','Gelatina'];
 const LISTA_COCINA = ['Empanada carne','Empanada pollo','Empanada verde','Bolón','Empanada de viento','Maduro con queso','Tortilla de tiesto','Tortilla de yuca','Tamal','Humitas','Ensalada','Sandwich jamón y queso'];
-const TAB_LABEL = {clock:'⏰ Turno',check:'✅ Actividades',prod:'🍞 Producción',bajas:'📉 Bajas',tips:'💵 Tips',pedido:'📦 Pedido',equipo:'🔧 Mi equipo',guia:'📖 Productos',inventario:'📋 Inventario',porrecibir:'📥 Por recibir',recepcion:'🚚 Recepción'};
+const TAB_LABEL = {clock:'⏰',check:'✅ Actividades',prod:'🍞 Producción',bajas:'📉 Bajas',tips:'💵 Tips',pedido:'📦 Pedido',equipo:'🔧 Mi equipo',guia:'📖 Productos',inventario:'📋 Inventario',porrecibir:'📥 Por recibir',recepcion:'🚚 Recepción'};
 const ESTACIONES = {
   'Panadería producción': {
     icon:'🥖',
@@ -1956,7 +1958,7 @@ const ESTACIONES = {
 // Módulos habilitados en esta etapa de prueba. Los demás se ven con 🔒 para que el equipo sepa que vienen, pero no se pueden abrir.
 // Para habilitar uno más, agrégalo a esta lista.
 const MODULOS_ACTIVOS=['clock','prod','bajas','pedido','porrecibir','recepcion','inventario'];
-const TABS=['clock','check','prod','bajas','pedido','porrecibir','recepcion','inventario','equipo','tips','guia'];   // orden de los módulos
+const TABS=['pedido','recepcion','prod','bajas','inventario','check','equipo','tips','clock'];   // orden de los módulos
 const AREAS_EST=['Panadería producción','Panadería','Cafetería','Cocina'];
 const estMod={check:'',bajas:'',equipo:''};      // área elegida dentro de cada módulo
 const estKey=a=>sinAc(String(a||'')).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'general';
@@ -3638,7 +3640,7 @@ function entrarDirecto(){
   TABS.forEach((id,i)=>{
     const btn=document.createElement('button');
     const on=MODULOS_ACTIVOS.includes(id);
-    btn.className='nav-tab'+(on?'':' bloqueado');btn.id='tab-'+id;btn.textContent=(on?'':'🔒 ')+TAB_LABEL[id];
+    btn.className='nav-tab'+(on?'':' bloqueado')+(id==='clock'?' solo-ico':'');btn.id='tab-'+id;btn.textContent=(on?'':'🔒 ')+TAB_LABEL[id];if(id==='clock')btn.setAttribute('aria-label','Turno');
     btn.onclick=()=>showPage(id);tabsEl.appendChild(btn);
   });
   prefillLocal();
@@ -4248,11 +4250,11 @@ window.RXS = R;
 })(RX_A, rxCompat(db));
 
 // ═══ Menú lateral del teléfono ═══
-const DRW_ORDEN=[{ids:['clock','check','pedido']},{ic:'📥',t:'Recepción',ids:['porrecibir','recepcion']},{ic:'🏭',t:'Producción',ids:['prod','bajas']},{ids:['inventario','equipo','tips','guia']}];
+const DRW_ORDEN=[{ids:['pedido','recepcion','prod','bajas','inventario','check','equipo','tips','clock']}];
 function drwItem(id,sub){
   if(!TABS.includes(id))return '';
-  const full=TAB_LABEL[id]||id,ic=full.split(' ')[0],tx=id==='recepcion'?'Recepción de productos':full.slice(full.indexOf(' ')+1),on=MODULOS_ACTIVOS.includes(id),b=document.getElementById('tab-'+id),n=b&&b.dataset.n;
-  return `<button class="drw-i${sub?' sub':''}${document.body.dataset.page===id?' act':''}${on?'':' off'}" data-id="${id}"><span class="drw-ic">${ic}</span><span class="drw-tx">${tx}</span>${on?'':'<small>🔒</small>'}${n?`<i class="drw-bd">${n}</i>`:''}</button>`;
+  const full=TAB_LABEL[id]||id,ic=full.split(' ')[0],tx=id==='clock'?'':full.slice(full.indexOf(' ')+1),on=MODULOS_ACTIVOS.includes(id),b=document.getElementById('tab-'+id),n=b&&b.dataset.n;
+  return `<button ${id==='clock'?'aria-label="Turno" ':''}class="drw-i${id==='clock'?' ico':''}${sub?' sub':''}${document.body.dataset.page===id?' act':''}${on?'':' off'}" data-id="${id}"><span class="drw-ic">${ic}</span><span class="drw-tx">${tx}</span>${on?'':'<small>🔒</small>'}${n?`<i class="drw-bd">${n}</i>`:''}</button>`;
 }
 function drwBuild(){
   const L=document.getElementById('drw-list');if(!L)return;
