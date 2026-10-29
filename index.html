@@ -200,6 +200,10 @@
   .nav-tab.active{background:var(--ac);border-color:var(--ac);color:#fff;}
   .chip-net{font-size:14px;font-weight:700;padding:10px 12px;border-radius:14px;white-space:nowrap;flex-shrink:0;}
   .chip-net.on{background:var(--okbg);color:var(--ok);} .chip-net.off{background:var(--erbg);color:var(--er);}
+  .chip-snd.on{background:var(--wn);border-color:var(--wn);color:#fff;}
+  body.test::after{content:'';position:fixed;inset:0;border:4px solid var(--wn);pointer-events:none;z-index:9998;}
+  #test-pill{display:none;white-space:nowrap;position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:9999;background:var(--wn);color:#fff;border:none;font:inherit;font-size:12px;font-weight:800;padding:3px 14px 4px;border-radius:0 0 12px 12px;cursor:pointer;}
+  body.test #test-pill{display:block;}
   .chip-snd{min-height:48px;min-width:48px;border:2px solid var(--bd);background:#fff;border-radius:14px;font-size:18px;flex-shrink:0;cursor:pointer;}
   .page{max-width:900px;padding:14px 14px 150px;}
   .card{border:2px solid var(--bd);border-radius:16px;box-shadow:none;padding:16px;}
@@ -842,7 +846,7 @@
     <span>Morochos OS EC</span>
   </div>
   <div class="nav-tabs" id="nav-tabs"></div>
-  <span class="chip-net on" id="chip-net">● En línea</span><button class="chip-snd" id="chip-snd" aria-label="Sonido">🔊</button>
+  <span class="chip-net on" id="chip-net">● En línea</span><button class="chip-snd" id="chip-snd" aria-label="Sonido">🔊</button><button class="chip-snd" id="chip-test" aria-label="Modo prueba" aria-pressed="false" title="Modo prueba: practicar sin guardar nada">🧪</button>
 </nav>
 
 <!-- Menú lateral (solo teléfono): reemplaza las pestañas de arriba -->
@@ -1151,6 +1155,7 @@
   <div class="ov-body" id="ov-body"></div>
   <div class="ov-foot" id="ov-foot"></div>
 </div></div>
+<button id="test-pill">🧪 MODO PRUEBA · toca para salir</button>
 <div class="undo-bar" id="undo-bar"><span id="undo-msg"></span><button id="undo-btn">Deshacer</button></div>
 <div class="foot-ubicacion" id="foot-ubicacion"></div>
 <button class="fab-clock" id="fab-clock" onclick="abrirClock()" aria-label="Registrar turno" title="Turno">⏰</button>
@@ -1874,10 +1879,10 @@ window.PRODREG = {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, getDocs, doc, setDoc, getDoc,
-  deleteDoc, runTransaction, increment, limit, updateDoc }
+  collection, addDoc as _addDoc, onSnapshot as _onSnapshot, query as _query, orderBy as _orderBy, serverTimestamp as _serverTimestamp, where as _where, getDocs as _getDocs, doc, setDoc as _setDoc, getDoc as _getDoc,
+  deleteDoc as _deleteDoc, runTransaction as _runTransaction, increment as _increment, limit as _limit, updateDoc as _updateDoc }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getStorage, ref, uploadString, getDownloadURL }
+import { getStorage, ref, uploadString as _uploadString, getDownloadURL as _getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -1893,6 +1898,96 @@ let db;
 try{ db = initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})}); }   // guarda datos sin conexión
 catch(e){ db = getFirestore(app); }
 const storage = getStorage(app);
+
+/* ═══════════════════════════════════════════════════════════════
+   🧪 MODO PRUEBA GLOBAL
+   Apagado: estas funciones son exactamente las de Firebase (no cambia nada).
+   Encendido: NADA se escribe en Firestore ni en Storage. Lo que se practica
+   se guarda solo en memoria, se ve en las pantallas como si fuera real y se
+   borra al salir del modo prueba (o al recargar la página).
+   ═══════════════════════════════════════════════════════════════ */
+let TEST=false;
+const TM={},TDEL={},TFILES={},TREAL={},TLIS=new Set();
+class TTS{constructor(m){this.m=m;this.seconds=Math.floor(m/1000);this.nanoseconds=0;}toMillis(){return this.m;}toDate(){return new Date(this.m);}valueOf(){return this.m;}}
+const tNom=x=>x&&(x._tc||x.path||x._c)||'';
+const tColDe=r=>r&&r.parent?r.parent.path:(r&&r._c)||'';
+const tEsDoc=t=>!!t&&(t.type==='document'||(t.id!==undefined&&t._c!==undefined&&!t.w&&!t._tc));
+const tv=v=>v&&typeof v.toMillis==='function'?v.toMillis():(v instanceof Date?v.getTime():v);
+const tClon=o=>{if(o===null||typeof o!=='object')return o;if(o instanceof TTS||o instanceof Date||typeof o.toMillis==='function')return o;if(Array.isArray(o))return o.map(tClon);const r={};for(const k in o)r[k]=tClon(o[k]);return r;};
+const tGet=(d,f)=>String(f).split('.').reduce((a,k)=>a==null?undefined:a[k],d);
+function tOk(d,cons){return (cons||[]).every(c=>{if(c[0]!=='w')return true;const [,f,op,val]=c,a=tv(tGet(d,f)),b=tv(val);
+  switch(op){case '==':return a===b;case '!=':return a!==b;case '>=':return a!==undefined&&a>=b;case '<=':return a!==undefined&&a<=b;case '>':return a!==undefined&&a>b;case '<':return a!==undefined&&a<b;
+    case 'in':return Array.isArray(val)&&val.map(tv).indexOf(a)>=0;case 'array-contains':return Array.isArray(a)&&a.indexOf(b)>=0;default:return true;}});}
+const tFakeDoc=(id,data,ref)=>({id,ref:ref||null,exists:()=>true,data:()=>tClon(data)});
+const tNoDoc=(id,ref)=>({id,ref:ref||null,exists:()=>false,data:()=>undefined});
+function tCache(t,snap){
+  try{if(tEsDoc(t)){if(snap.exists())TREAL[tColDe(t)+'/'+t.id]=tClon(snap.data());return;}
+    const n=tNom(t);snap.docs.forEach(d=>{TREAL[n+'/'+d.id]=tClon(d.data());});}catch(e){}
+}
+function tSnapQuery(t,real){
+  const n=tNom(t),cons=t._cons||[],ov=TM[n]||{},del=TDEL[n]||{},out=[],seen={};
+  real.docs.forEach(d=>{seen[d.id]=1;if(del[d.id])return;if(ov[d.id]){if(tOk(ov[d.id],cons))out.push(tFakeDoc(d.id,ov[d.id],d.ref));return;}out.push(d);});
+  Object.keys(ov).forEach(id=>{if(!seen[id]&&tOk(ov[id],cons))out.push(tFakeDoc(id,ov[id]));});
+  const ob=cons.filter(c=>c[0]==='o')[0];
+  if(ob){const dir=ob[2]==='desc'?-1:1;out.sort((a,b)=>{const x=tv(tGet(a.data(),ob[1])),y=tv(tGet(b.data(),ob[1]));return (x<y?-1:x>y?1:0)*dir;});}
+  const lim=cons.filter(c=>c[0]==='l')[0];const docs=lim?out.slice(0,lim[1]):out;
+  return {docs,size:docs.length,empty:!docs.length,forEach:f=>docs.forEach(f),docChanges:()=>[]};
+}
+function tSnapDoc(t,real){const n=tColDe(t),id=t.id;
+  if(TDEL[n]&&TDEL[n][id])return tNoDoc(id,t);
+  if(TM[n]&&TM[n][id])return tFakeDoc(id,TM[n][id],t);
+  return real;}
+function tEmit(rec){if(!rec.real)return;try{rec.cb(TEST?(tEsDoc(rec.target)?tSnapDoc(rec.target,rec.real):tSnapQuery(rec.target,rec.real)):rec.real);}catch(e){console.error(e);}}
+function tRefresh(n){TLIS.forEach(rec=>{const m=tEsDoc(rec.target)?tColDe(rec.target):tNom(rec.target);if(m===n)setTimeout(()=>tEmit(rec),0);});}
+function tPut(ref,d,o){
+  const n=tColDe(ref),id=ref.id;TM[n]=TM[n]||{};
+  const borrado=TDEL[n]&&TDEL[n][id];if(TDEL[n])delete TDEL[n][id];
+  const prev=TM[n][id]||(borrado?null:TREAL[n+'/'+id])||null,out=(o&&o.merge&&prev)?Object.assign({},prev):{};
+  for(const k in d){const v=d[k];if(v&&typeof v==='object'&&v.__inc!==undefined)out[k]=(Number(prev&&prev[k])||0)+v.__inc;else if(v!==undefined)out[k]=v;}
+  TM[n][id]=tClon(out);tRefresh(n);return Promise.resolve();
+}
+function tDel(ref){const n=tColDe(ref),id=ref.id;if(TM[n])delete TM[n][id];(TDEL[n]=TDEL[n]||{})[id]=true;tRefresh(n);return Promise.resolve();}
+const setDoc=(r,d,o)=>TEST?tPut(r,d,o):_setDoc(r,d,o);
+const updateDoc=(r,d)=>TEST?tPut(r,d,{merge:true}):_updateDoc(r,d);
+const deleteDoc=r=>TEST?tDel(r):_deleteDoc(r);
+const addDoc=async(c,d)=>{if(!TEST)return _addDoc(c,d);const r=doc(c);await tPut(r,d);return r;};
+const serverTimestamp=()=>TEST?new TTS(Date.now()):_serverTimestamp();
+const increment=n=>TEST?{__inc:n}:_increment(n);
+const where=(f,o,v)=>{const c=_where(f,o,v);try{c._t=['w',f,o,v];}catch(e){}return c;};
+const orderBy=(f,d)=>{const c=_orderBy(f,d);try{c._t=['o',f,d||'asc'];}catch(e){}return c;};
+const limit=k=>{const c=_limit(k);try{c._t=['l',k];}catch(e){}return c;};
+const query=(q,...cs)=>{const r=_query(q,...cs);try{r._tc=q._tc||q.path||q._c;r._cons=(q._cons||[]).concat(cs.map(c=>c&&c._t).filter(Boolean));}catch(e){}return r;};
+function onSnapshot(target,cb,err){
+  const rec={target,cb,real:null};TLIS.add(rec);
+  const un=_onSnapshot(target,s=>{rec.real=s;if(TEST)tCache(target,s);tEmit(rec);},err);
+  return()=>{TLIS.delete(rec);try{un&&un();}catch(e){}};
+}
+async function getDoc(r){
+  if(!TEST)return _getDoc(r);
+  const n=tColDe(r);if(TDEL[n]&&TDEL[n][r.id])return tNoDoc(r.id,r);if(TM[n]&&TM[n][r.id])return tFakeDoc(r.id,TM[n][r.id],r);
+  const real=await _getDoc(r);try{if(real.exists())TREAL[n+'/'+r.id]=tClon(real.data());}catch(e){}return real;
+}
+async function getDocs(q){const real=await _getDocs(q);return TEST?tSnapQuery(q,real):real;}
+const runTransaction=(dbx,fn)=>{
+  if(!TEST)return _runTransaction(dbx,fn);
+  const tx={get:r=>getDoc(r),set:(r,d,o)=>{tPut(r,d,o);return tx;},update:(r,d)=>{tPut(r,d,{merge:true});return tx;},delete:r=>{tDel(r);return tx;}};
+  return Promise.resolve(fn(tx));
+};
+const uploadString=(r,str,f)=>{if(!TEST)return _uploadString(r,str,f);TFILES[r.fullPath||r.name]=str;return Promise.resolve({ref:r});};
+const getDownloadURL=r=>(TEST&&TFILES[r.fullPath||r.name])?Promise.resolve(TFILES[r.fullPath||r.name]):_getDownloadURL(r);
+function testSet(on){
+  TEST=!!on;
+  if(!TEST){[TM,TDEL,TFILES].forEach(o=>Object.keys(o).forEach(k=>delete o[k]));}
+  else{TM.proveedores={prov_distribuidora_ejemplo:{nombre:'Distribuidora Ejemplo',ejemplo:true},prov_lacteos_ejemplo:{nombre:'Lácteos Ejemplo',ejemplo:true}};}
+  // lo que estaba a medias (p. ej. una recepción en pantalla) no debe pasar de un modo al otro
+  try{const R=window.RXS;if(R){R.id=null;R.d=null;R.det=null;R.step=1;R.q='';R.foto={};R.pend=null;R.m=null;R.nw={};}
+    const m=document.getElementById('rx-modal');if(m){m.className='';m.innerHTML='';}}catch(e){}
+  document.body.classList.toggle('test',TEST);
+  const b=document.getElementById('chip-test');if(b){b.classList.toggle('on',TEST);b.setAttribute('aria-pressed',TEST?'true':'false');}
+  TLIS.forEach(rec=>tEmit(rec));
+  try{window.rxRefresh&&window.rxRefresh();}catch(e){}
+  showToast(TEST?'🧪 Modo prueba: nada se guarda de verdad':'✅ Modo prueba apagado. Lo practicado se borró.');
+}
 let motivoSel='', turnoSel='', turnoTipsSel='', pendiente=null;
 
 // (La configuración de cada estación está más abajo, en ESTACIONES.)
@@ -3333,6 +3428,10 @@ function iniciarUI(){
   $('rm').addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(b)recMotivo(b.dataset.m);});
   $('undo-btn').addEventListener('click',undoPress);
   $('chip-snd').addEventListener('click',toggleSonido);
+  const testAlternar=()=>{vib(10);
+    if(TEST){if(confirm('¿Salir del modo prueba?\nSe borra todo lo que practicaste (no estaba guardado).'))testSet(false);return;}
+    openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}testSet(true);});};
+  $('chip-test').addEventListener('click',testAlternar);$('test-pill').addEventListener('click',testAlternar);
   $('chip-snd').textContent=sonidoOn?'🔊':'🔇';actualizarRed();
 }
 let _listenersOk=false;
