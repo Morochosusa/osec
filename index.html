@@ -1042,6 +1042,7 @@
       <div class="ped-tools"><button class="bt" id="ped-nuevo">➕ Producto nuevo</button><button class="bt ojo" id="ped-ojo" aria-pressed="false" aria-label="Ocultar los productos que no voy a pedir"></button></div>
       <div class="card vacio" id="ped-vacio" style="display:none">No hay productos en esta área todavía.</div>
       <div id="ped-grid"></div>
+      <button class="bt" id="ped-elim" style="display:none;margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px"></button>
     </section>
   </div>
   <div class="bar-sticky"><div class="cnt" id="ped-count">0 productos</div><button class="bt ac" id="ped-send" disabled>Enviar a revisión</button></div>
@@ -2941,7 +2942,7 @@ async function prodMover(id,dir){
 }
 async function prodEliminar(id){
   const p=CAT_TODOS.find(x=>x.id===id);if(!p)return;
-  if(!confirm('¿Eliminar "'+p.nombre+'" de la lista de pedido?\nSe puede restaurar desde ⚙ Productos.'))return;
+  if(!confirm('¿Eliminar "'+p.nombre+'" de la lista de pedido?\nSe puede restaurar desde «Productos eliminados», al final de la lista.'))return;
   delete pedItems[id];guardarBorrador();
   try{await setDoc(doc(db,'productos_ajustes',id),{oculto:true},{merge:true});vib(30);showToast('🗑 Producto eliminado');}
   catch(e){console.error(e);showToast('❌ No se pudo eliminar');}
@@ -3005,6 +3006,8 @@ function renderPedido(){
       <button class="pr-ed" data-ed="${esc(p.id)}" aria-label="Cambiar cantidad">✎</button></div>`;}).join('')+`</div></div>`).join('');
   const bo=$('ped-ojo');if(bo){bo.classList.toggle('on',pedOcultar);bo.setAttribute('aria-pressed',pedOcultar?'true':'false');
     bo.innerHTML=pedOcultar?'<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>':'<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';}
+  const nEl=CAT_TODOS.filter(x=>x.oculto&&enArea(x,pedCat)).length,be=$('ped-elim');
+  if(be){be.style.display=nEl&&!q?'block':'none';be.textContent='↩ Productos eliminados ('+nEl+')';}
   const n=Object.keys(pedItems).length;
   $('ped-count').textContent=`${n} producto${n===1?'':'s'}`;
   $('ped-send').disabled=!n;
@@ -3033,7 +3036,7 @@ function pdCerrar(){
 function pdPintar(){
   const p=pdP(),b=$('pd-body'),main=pdVista==='main';
   $('pd-back').style.visibility=main?'hidden':'visible';
-  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':'Tamaño de paquete';
+  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':pdVista==='elim'?'Productos eliminados':'Tamaño de paquete';
   $('pd-sub').textContent=main?'':(p.nombre||'');
   if(main){
     const q=pedItems[pdId]||0;
@@ -3045,13 +3048,17 @@ function pdPintar(){
       <div class="pd-row" data-r="pack"><span class="pd-ic">📦</span><span class="pd-k">Tamaño de paquete 🔒</span><span class="pd-v">${esc(p.resto||'—')}</span><span class="pd-ch">›</span></div>
       <div class="pd-row" data-r="area"><span class="pd-ic">📍</span><span class="pd-k">Estación 🔒</span><span class="pd-v">${esc(areaNombre(p.categoria))}</span><span class="pd-ch">›</span></div>
     </div>
-    <button class="pd-quitar" data-r="del">Quitar del pedido</button>`;
+    <button class="pd-quitar" data-r="del">Quitar del pedido</button>
+    <button class="pd-quitar" data-r="elim" style="margin-top:10px;background:transparent;border:2px solid var(--er)">🗑 Eliminar producto de la lista 🔒</button>`;
   }else if(pdVista==='cat'){
     const act=p.seccion||'',base=PD_CATS.indexOf(act)<0&&act?PD_CATS.concat([act]):PD_CATS,q=sinAc(pdQ);
     const lis=base.filter(c=>!q||sinAc(c).includes(q));
     b.innerHTML=`<input type="search" class="pd-bus" id="pd-bus" placeholder="🔍 Buscar categorías" value="${esc(pdQ)}" autocomplete="off">
     <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>`;
     const bus=$('pd-bus');if(bus&&pdQ){bus.focus();bus.setSelectionRange(pdQ.length,pdQ.length);}
+  }else if(pdVista==='elim'){
+    const el=CAT_TODOS.filter(x=>x.oculto&&enArea(x,pedCat));
+    b.innerHTML=el.length?`<div class="pd-grp pd-lista">${el.map(x=>`<div class="pd-row" data-rest="${esc(x.id)}"><span class="pd-k">${esc(x.nombre)} <small style="color:var(--mu)">${esc(x.seccion||'')}</small></span><span class="pd-v" style="color:var(--ac);font-weight:700">↩ Restaurar</span></div>`).join('')}</div>`:'<div class="pd-hint" style="text-align:center;margin-top:30px">No hay productos eliminados en esta lista.</div>';
   }else if(pdVista==='area'){
     b.innerHTML=`<div class="pd-grp pd-lista">${AREAS.map(([c,l])=>`<div class="pd-row" data-a="${esc(c)}"><span class="pd-ic">${esc(l.split(' ')[0])}</span><span class="pd-k">${esc(l.slice(l.indexOf(' ')+1))}</span>${sinAc(c)===sinAc(p.categoria)?'<span class="pd-ok">✓</span>':''}</div>`).join('')}</div>`;
   }else{
@@ -3070,10 +3077,10 @@ async function pdGuardar(campos){
 function pdIniciar(){
   $('pd-done').addEventListener('click',()=>{
     if(pdVista==='pack'){const i=$('pd-pack');if(i&&i.value.trim()!==(pdP().resto||''))pdGuardar({resto:i.value.trim()});}
-    if(pdVista!=='main'){pdVista='main';pdPintar();return;}
+    if(pdVista!=='main'&&pdId){pdVista='main';pdPintar();return;}
     pdCerrar();
   });
-  $('pd-back').addEventListener('click',()=>{pdVista='main';pdPintar();});
+  $('pd-back').addEventListener('click',()=>{if(!pdId){pdCerrar();return;}pdVista='main';pdPintar();});
   $('pd-body').addEventListener('input',e=>{if(e.target.id==='pd-bus'){pdQ=e.target.value;pdPintar();}});
   $('pd-body').addEventListener('keydown',e=>{if(e.target.id==='pd-pack'&&e.key==='Enter')$('pd-done').click();});
   $('pd-foto').addEventListener('change',e=>{const f=e.target.files[0];if(f&&pdId)cfgSubirFoto(pdId,f);e.target.value='';});
@@ -3082,10 +3089,13 @@ function pdIniciar(){
     if(st){vib(10);pedItems[pdId]=Math.max(0,r2((pedItems[pdId]||0)+parseFloat(st.dataset.s)));$('pd-qv').textContent=fmtN(pedItems[pdId]);return;}
     const c=e.target.closest('[data-c]');
     if(c){if(c.dataset.c!==(pdP().seccion||''))pdGuardar({seccion:c.dataset.c});pdVista='main';pdQ='';pdPintar();return;}
+    const rs=e.target.closest('[data-rest]');
+    if(rs){prodRestaurar(rs.dataset.rest);setTimeout(pdPintar,150);return;}
     const ar=e.target.closest('[data-a]');
     if(ar){if(sinAc(ar.dataset.a)!==sinAc(pdP().categoria)){const n=areaNombre(ar.dataset.a);pdGuardar({categoria:ar.dataset.a});showToast('📍 Movido a '+n);}pdVista='main';pdPintar();return;}
     const r=e.target.closest('[data-r]');if(!r)return;const k=r.dataset.r;
     if(k==='cat')mgrCodigo(()=>{pdVista='cat';pdQ='';pdPintar();});
+    else if(k==='elim')mgrCodigo(async()=>{const id=pdId;$('pd').classList.remove('open');pdId=null;await prodEliminar(id);renderPedido();});
     else if(k==='area')mgrCodigo(()=>{pdVista='area';pdPintar();});
     else if(k==='pack')mgrCodigo(()=>{pdVista='pack';pdPintar();});
     else if(k==='foto')mgrCodigo(()=>$('pd-foto').click());
@@ -3394,6 +3404,7 @@ function iniciarUI(){
   $('inv-save').addEventListener('click',invGuardar);
   $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedTap(b.dataset.id);});
   initArrastre();pdIniciar();
+  $('ped-elim').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='elim';pdPintar();$('pd').classList.add('open');}));
   $('ped-cats').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const b=e.target.closest('.parea');if(b){pedCat=b.dataset.c;pedQ='';$('ped-search').value='';vib();renderPedido();}});
   $('ped-search').addEventListener('input',e=>{pedQ=e.target.value;renderPedido();});
   $('ped-send').addEventListener('click',pedEnviar);
