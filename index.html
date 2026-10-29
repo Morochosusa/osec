@@ -317,7 +317,7 @@
   .mp-sec{background:var(--acbg);color:var(--ac);font-weight:800;font-size:14px;padding:6px 10px;border-radius:8px;margin:10px 0 2px;}
   .mp-del{margin-top:10px;width:100%;min-height:48px;border:2px solid var(--er);background:#fff;color:var(--er);border-radius:12px;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;}
   .guia-row{display:flex;gap:8px;align-items:stretch;margin-bottom:8px;} .guia-row .guia{flex:1;margin:0;} .guia-row .rev-x{align-self:stretch;}
-  .ped-tools{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--bd);background:#fff;} .ped-tools .bt{flex:1;min-height:52px;font-size:16px;}
+  .ped-tools{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--bd);background:#fff;} .ped-tools{position:sticky;top:47px;z-index:4;} .ped-tools .bt{flex:1;min-height:52px;font-size:16px;}
   .ped-tools .bt.on{background:var(--er);color:#fff;border-color:var(--er);}
   .ped-tools .bt.ojo{flex:0 0 64px;display:flex;align-items:center;justify-content:center;padding:0;} .ped-tools .bt.ojo svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   .ped-tools .bt.ojo.on{background:var(--ac);color:#fff;border-color:var(--ac);}
@@ -718,9 +718,9 @@
     #page-pedido .ped-right{overflow:visible;}
     #page-pedido .pr-head{position:static;background:transparent;border:none;padding:10px 12px 4px;text-align:left;display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
     #page-pedido .pr-title{font-size:18px;} #page-pedido .pr-sub{font-size:15px;font-weight:600;color:var(--ac);white-space:nowrap;}
-    #page-pedido .ped-tools{background:transparent;border:none;padding:4px 10px 8px;} #page-pedido .ped-tools .bt{min-height:44px;font-size:15px;}
+    #page-pedido .ped-tools{background:#f4f2ec;border:none;padding:6px 10px 8px;top:60px;z-index:8;} #page-pedido .ped-tools .bt{min-height:44px;font-size:15px;}
     #ped-grid{padding:0 10px;}
-    #page-pedido .sec-h{text-align:left;border-radius:12px 12px 0 0;margin-top:10px;font-size:16px;padding:8px 14px;position:sticky;top:56px;z-index:5;}
+    #page-pedido .sec-h{text-align:left;border-radius:12px 12px 0 0;margin-top:10px;font-size:16px;padding:8px 14px;position:sticky;top:118px;z-index:5;}
     #page-pedido .plist{border:2px solid var(--bd);border-top:none;border-radius:0 0 14px 14px;overflow:hidden;}
     #page-pedido .prow{min-height:64px;}
     #page-pedido .pr-th{width:64px;min-height:64px;font-size:20px;}
@@ -2661,7 +2661,8 @@ function armarBase(local){
   CAT_BASE=out;
 }
 const unidadDe=p=>(p.resto||'').replace(/^×\s*/,'')||'uds';
-const descDe=p=>`${fmtN(p.cant)}${p.resto?' '+p.resto:''}`;
+const restoX=r=>{r=String(r||'').trim();return r?(/^[x×]\s*/i.test(r)?'× '+r.replace(/^[x×]\s*/i,''):'× '+r):'';};
+const descDe=p=>`${fmtN(p.cant)}${p.resto?' '+restoX(p.resto):''}`;
 let CAT=[];
 const subDe=sec=>/^mercado$/i.test(sec)?'mercado':/^facility$/i.test(sec)?'facility':/^proveedores$/i.test(sec)?'proveedores':'bodega';
 function propios(){const lc=dispositivo&&LOCAL_CODE[dispositivo.local];if(!lc)return [];return Object.keys(OVR).filter(id=>OVR[id]&&OVR[id].custom&&(OVR[id].local||'la_victoria')===lc).map(id=>{const o=OVR[id];return {id,nombre:o.nombre||'(sin nombre)',cant:o.cant>0?o.cant:1,resto:o.resto||'',categoria:o.categoria||'cocina',seccion:o.seccion||'Bodega',subcategoria:subDe(o.seccion||'Bodega'),_custom:true};});}
@@ -2905,7 +2906,7 @@ function renderPedido(){
   $('ped-grid').innerHTML=secs.map(sc=>`<div class="secblk" data-sec="${esc(sc)}">${sc?`<div class="sec-h">🗂 ${esc(sc)}</div>`:''}<div class="plist">`+lista.filter(p=>(p.seccion||'')===sc).map(p=>{
     const c=pedItems[p.id],sel=c!==undefined;
     return `<div class="prow ${sel?'sel':'tachado'}${p.id===ultMov?' mov':''}" data-id="${esc(p.id)}">${thumbFila(p)}
-      <div class="pr-main"><span class="pr-n">${esc(p.nombre)}</span> <span class="pr-d">${sel?`(<b>${fmtN(c)}</b>${p.resto?' '+esc(p.resto):''})`:`(${esc(descDe(p))})`}</span></div>
+      <div class="pr-main"><span class="pr-n">${esc(p.nombre)}</span> <span class="pr-d">${sel?`(<b>${fmtN(c)}</b>${p.resto?' '+esc(restoX(p.resto)):''})`:`(${esc(descDe(p))})`}</span></div>
       <button class="pr-ed" data-ed="${esc(p.id)}" aria-label="Cambiar cantidad">✎</button></div>`;}).join('')+`</div></div>`).join('');
   const bo=$('ped-ojo');if(bo){bo.classList.toggle('on',pedOcultar);bo.setAttribute('aria-pressed',pedOcultar?'true':'false');
     bo.innerHTML=pedOcultar?'<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>':'<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';}
@@ -2937,7 +2938,7 @@ function pdCerrar(){
 function pdPintar(){
   const p=pdP(),b=$('pd-body'),main=pdVista==='main';
   $('pd-back').style.visibility=main?'hidden':'visible';
-  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':'Tamaño de paquete';
+  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':'Tamaño de paquete';
   $('pd-sub').textContent=main?'':(p.nombre||'');
   if(main){
     const q=pedItems[pdId]||0;
@@ -2947,6 +2948,7 @@ function pdPintar(){
       <div class="pd-row" data-r="cat"><span class="pd-ic">📚</span><span class="pd-k">Categoría 🔒</span><span class="pd-v">${esc(p.seccion||'—')}</span><span class="pd-ch">›</span></div>
       <div class="pd-row" data-r="qty"><span class="pd-ic">🔢</span><span class="pd-k">Cantidad</span><span class="pd-v" id="pd-qv" style="color:#111;font-weight:700">${fmtN(q)}</span><span class="pd-step"><button data-s="-1" aria-label="Menos">−</button><i></i><button data-s="1" aria-label="Más">+</button></span></div>
       <div class="pd-row" data-r="pack"><span class="pd-ic">📦</span><span class="pd-k">Tamaño de paquete 🔒</span><span class="pd-v">${esc(p.resto||'—')}</span><span class="pd-ch">›</span></div>
+      <div class="pd-row" data-r="area"><span class="pd-ic">📍</span><span class="pd-k">Estación 🔒</span><span class="pd-v">${esc(areaNombre(p.categoria))}</span><span class="pd-ch">›</span></div>
     </div>
     <button class="pd-quitar" data-r="del">Quitar del pedido</button>`;
   }else if(pdVista==='cat'){
@@ -2955,6 +2957,8 @@ function pdPintar(){
     b.innerHTML=`<input type="search" class="pd-bus" id="pd-bus" placeholder="🔍 Buscar categorías" value="${esc(pdQ)}" autocomplete="off">
     <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>`;
     const bus=$('pd-bus');if(bus&&pdQ){bus.focus();bus.setSelectionRange(pdQ.length,pdQ.length);}
+  }else if(pdVista==='area'){
+    b.innerHTML=`<div class="pd-grp pd-lista">${AREAS.map(([c,l])=>`<div class="pd-row" data-a="${esc(c)}"><span class="pd-ic">${esc(l.split(' ')[0])}</span><span class="pd-k">${esc(l.slice(l.indexOf(' ')+1))}</span>${sinAc(c)===sinAc(p.categoria)?'<span class="pd-ok">✓</span>':''}</div>`).join('')}</div>`;
   }else{
     b.innerHTML=`<div class="pd-sec">Tamaño de paquete</div><input class="pd-in" id="pd-pack" value="${esc(p.resto||'')}" placeholder="Ej. × 1 lb, × 1 kg, caja" autocomplete="off"><div class="pd-hint">Cómo viene el producto. Ej.: × 1 lb, × 1 arroba, cajas.</div>`;
     setTimeout(()=>{const i=$('pd-pack');if(i)i.focus();},80);
@@ -2964,6 +2968,7 @@ async function pdGuardar(campos){
   const id=pdId,base=CAT_BASE.find(x=>x.id===id),d={...campos};
   if(base&&'seccion' in d&&d.seccion===base.seccion)d.seccion=null;
   if(base&&'resto' in d&&d.resto===base.resto)d.resto=null;
+  if(base&&'categoria' in d&&sinAc(d.categoria)===sinAc(base.categoria))d.categoria=null;
   OVR[id]={...(OVR[id]||{}),...d};aplicarOvr();renderPedido();renderInv();vib();
   try{await setDoc(doc(db,'productos_ajustes',id),d,{merge:true});}catch(e){console.error(e);showToast('❌ No se pudo guardar');}
 }
@@ -2982,8 +2987,11 @@ function pdIniciar(){
     if(st){vib(10);pedItems[pdId]=Math.max(0,r2((pedItems[pdId]||0)+parseFloat(st.dataset.s)));$('pd-qv').textContent=fmtN(pedItems[pdId]);return;}
     const c=e.target.closest('[data-c]');
     if(c){if(c.dataset.c!==(pdP().seccion||''))pdGuardar({seccion:c.dataset.c});pdVista='main';pdQ='';pdPintar();return;}
+    const ar=e.target.closest('[data-a]');
+    if(ar){if(sinAc(ar.dataset.a)!==sinAc(pdP().categoria)){const n=areaNombre(ar.dataset.a);pdGuardar({categoria:ar.dataset.a});showToast('📍 Movido a '+n);}pdVista='main';pdPintar();return;}
     const r=e.target.closest('[data-r]');if(!r)return;const k=r.dataset.r;
     if(k==='cat')mgrCodigo(()=>{pdVista='cat';pdQ='';pdPintar();});
+    else if(k==='area')mgrCodigo(()=>{pdVista='area';pdPintar();});
     else if(k==='pack')mgrCodigo(()=>{pdVista='pack';pdPintar();});
     else if(k==='foto')mgrCodigo(()=>$('pd-foto').click());
     else if(k==='qty')openKeypad(pdP().nombre,pedItems[pdId]||0,v=>{pedItems[pdId]=v;pdPintar();},pdP().unidad_medida);
