@@ -3812,10 +3812,8 @@ const RX_A={
   SV:()=>serverTimestamp(),
   INC:n=>increment(n),
   empleados:()=>encargadosDeLocal(dispositivo.local),
-  items:()=>{
-    const base=CAT_TODOS.filter(p=>!p.oculto).map(p=>({id:p.id,nombre:p.nombre,unidad:unidadDe(p),uCompra:unidadDe(p),cons:'ambiente'}));
-    const vistos=new Set(base.map(x=>panNorm(x.nombre)));
-    mpActivos().forEach(m=>{if(!vistos.has(panNorm(m.nombre))){vistos.add(panNorm(m.nombre));base.push({id:m.producto_id||('mp_'+m._id),nombre:m.nombre,unidad:m.unidad||'unidades',uCompra:m.unidad||'unidades',cons:'ambiente'});}});
+  items:()=>{   // solo lo que está en la categoría «Proveedores» de la lista de Pedido (se actualiza solo al cambiar esa lista)
+    const base=CAT_TODOS.filter(p=>!p.oculto&&sinAc(p.seccion)==='proveedores').map(p=>({id:p.id,nombre:p.nombre,unidad:unidadDe(p),uCompra:unidadDe(p),cons:'ambiente'}));
     return base.sort((a,b)=>a.nombre.localeCompare(b.nombre));
   },
   teclado:(t,ini,uni,cb)=>openKeypad(t,ini,cb,uni),
