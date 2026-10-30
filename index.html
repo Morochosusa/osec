@@ -1046,6 +1046,7 @@
       <div class="ped-tools"><button class="bt" id="ped-nuevo">➕ Producto nuevo</button><button class="bt ojo" id="ped-ojo" aria-pressed="false" aria-label="Ocultar los productos que no voy a pedir"></button></div>
       <div class="card vacio" id="ped-vacio" style="display:none">No hay productos en esta área todavía.</div>
       <div id="ped-grid"></div>
+      <button class="bt" id="ped-nombres" style="margin:12px 10px 0;width:calc(100% - 20px);min-height:48px;font-size:15px">✎ Editar nombres de esta lista 🔒</button>
       <button class="bt" id="ped-elim" style="display:none;margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px"></button>
     </section>
   </div>
@@ -2968,7 +2969,6 @@ function iniciarCfg(){
   $('ped-ojo').addEventListener('click',()=>{
     pedOcultar=!pedOcultar;try{localStorage.setItem('ped_ocultar',pedOcultar?'1':'0');}catch(_){}
     vib();renderPedido();
-    showToast(pedOcultar?'👁 Solo los productos por pedir':'👁 Todos los productos');
   });
   $('np-cancel').addEventListener('click',()=>$('np').classList.remove('open'));
   $('np-ok').addEventListener('click',prodNuevoGuardar);
@@ -3048,11 +3048,11 @@ function pdCerrar(){
 function pdPintar(){
   const p=pdP(),b=$('pd-body'),main=pdVista==='main';
   $('pd-back').style.visibility=main?'hidden':'visible';
-  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':pdVista==='elim'?'Productos eliminados':pdVista==='est'?'Estaciones':'Tamaño de paquete';
+  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':pdVista==='elim'?'Productos eliminados':pdVista==='est'?'Estaciones':pdVista==='nom'?'Nombre del producto':pdVista==='noms'?'Nombres de productos':'Tamaño de paquete';
   $('pd-sub').textContent=main?'':(p.nombre||'');
   if(main){
     const q=pedItems[pdId]||0;
-    b.innerHTML=`<div class="pd-card"><div class="pd-th" data-r="foto" aria-label="Cambiar foto (código)">${thumb(p)}</div><div class="pd-nm"><b>${esc(p.nombre)}</b></div></div>
+    b.innerHTML=`<div class="pd-card"><div class="pd-th" data-r="foto" aria-label="Cambiar foto (código)">${thumb(p)}</div><div class="pd-nm" data-r="nom" style="cursor:pointer"><b>${esc(p.nombre)}</b><div style="font-size:13px;color:var(--ac);font-weight:700;margin-top:4px">✎ Cambiar nombre 🔒</div></div></div>
     <div class="pd-sec">Información</div>
     <div class="pd-grp">
       <div class="pd-row" data-r="cat"><span class="pd-ic">📚</span><span class="pd-k">Categoría 🔒</span><span class="pd-v">${esc(p.seccion||'—')}</span><span class="pd-ch">›</span></div>
@@ -3068,6 +3068,12 @@ function pdPintar(){
     b.innerHTML=`<input type="search" class="pd-bus" id="pd-bus" placeholder="🔍 Buscar categorías" value="${esc(pdQ)}" autocomplete="off">
     <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>`;
     const bus=$('pd-bus');if(bus&&pdQ){bus.focus();bus.setSelectionRange(pdQ.length,pdQ.length);}
+  }else if(pdVista==='nom'){
+    b.innerHTML=`<div class="pd-sec">Nombre</div><input class="pd-in" id="pd-nom" value="${esc(p.nombre||'')}" maxlength="60" autocomplete="off"><div class="pd-hint">El cambio se ve en la lista de pedido, en Inventario y en Recepción. Los pedidos ya enviados conservan el nombre con el que salieron.</div>`;
+    setTimeout(()=>{const i=$('pd-nom');if(i){i.focus();i.select();}},80);
+  }else if(pdVista==='noms'){
+    const l=CAT.filter(x=>enArea(x,pedCat));
+    b.innerHTML=`<div class="pd-hint" style="margin:0 8px 12px">Escribe el nombre nuevo donde lo necesites y toca <b>Listo</b>. Solo se guardan los que cambies.</div><div class="pd-grp">${l.map(x=>`<div class="pd-row" style="gap:8px;cursor:default;min-height:64px"><input class="pd-in2" data-nid="${esc(x.id)}" data-o="${esc(x.nombre)}" value="${esc(x.nombre)}" maxlength="60" aria-label="Nombre"></div>`).join('')||'<div class="pd-row" style="color:var(--mu)">No hay productos en esta estación.</div>'}</div>`;
   }else if(pdVista==='est'){
     b.innerHTML=`<div class="pd-hint" style="margin:0 8px 12px">Cambia el nombre o el ícono de cada estación, o agrega una nueva. Los productos no se mueven. Toca <b>Listo</b> para guardar.</div>
     <div class="pd-grp">${AREAS.map(([k,l])=>{const em=l.split(' ')[0],nm=l.slice(em.length+1);return `<div class="pd-row" style="gap:8px;cursor:default"><input class="pd-emo" data-ek="${esc(k)}" value="${esc(em)}" maxlength="4" aria-label="Ícono"><input class="pd-in2" data-en="${esc(k)}" value="${esc(nm)}" maxlength="30" aria-label="Nombre"></div>`;}).join('')}</div>
@@ -3082,10 +3088,11 @@ function pdPintar(){
     setTimeout(()=>{const i=$('pd-pack');if(i)i.focus();},80);
   }
 }
-async function pdGuardar(campos){
-  const id=pdId,base=CAT_BASE.find(x=>x.id===id),d={...campos};
+async function pdGuardar(campos,idx){
+  const id=idx||pdId,base=CAT_BASE.find(x=>x.id===id),d={...campos};
   if(base&&'seccion' in d&&d.seccion===base.seccion)d.seccion=null;
   if(base&&'resto' in d&&d.resto===base.resto)d.resto=null;
+  if(base&&'nombre' in d&&d.nombre===base.nombre)d.nombre=null;
   if(base&&'categoria' in d&&sinAc(d.categoria)===sinAc(base.categoria))d.categoria=null;
   OVR[id]={...(OVR[id]||{}),...d};aplicarOvr();renderPedido();renderInv();vib();
   try{await setDoc(doc(db,'productos_ajustes',id),d,{merge:true});}catch(e){console.error(e);showToast('❌ No se pudo guardar');}
@@ -3106,6 +3113,8 @@ async function estGuardar(){
 function pdIniciar(){
   $('pd-done').addEventListener('click',()=>{
     if(pdVista==='est')estGuardar();
+    if(pdVista==='nom'){const i=$('pd-nom'),v=i?i.value.trim():'';if(!v){showToast('⚠️ Escribe un nombre');return;}if(v!==(pdP().nombre||''))pdGuardar({nombre:v});}
+    if(pdVista==='noms'){let n=0;document.querySelectorAll('#pd-body [data-nid]').forEach(i=>{const v=i.value.trim();if(v&&v!==i.dataset.o){n++;pdGuardar({nombre:v},i.dataset.nid);}});if(n)showToast('✅ '+n+' nombre'+(n===1?'':'s')+' guardado'+(n===1?'':'s'));}
     if(pdVista==='pack'){const i=$('pd-pack');if(i&&i.value.trim()!==(pdP().resto||''))pdGuardar({resto:i.value.trim()});}
     if(pdVista!=='main'&&pdId){pdVista='main';pdPintar();return;}
     pdCerrar();
@@ -3126,6 +3135,7 @@ function pdIniciar(){
     const r=e.target.closest('[data-r]');if(!r)return;const k=r.dataset.r;
     if(k==='cat')mgrCodigo(()=>{pdVista='cat';pdQ='';pdPintar();});
     else if(k==='elim')mgrCodigo(async()=>{const id=pdId;$('pd').classList.remove('open');pdId=null;await prodEliminar(id);renderPedido();});
+    else if(k==='nom')mgrCodigo(()=>{pdVista='nom';pdPintar();});
     else if(k==='area')mgrCodigo(()=>{pdVista='area';pdPintar();});
     else if(k==='pack')mgrCodigo(()=>{pdVista='pack';pdPintar();});
     else if(k==='foto')mgrCodigo(()=>$('pd-foto').click());
@@ -3451,6 +3461,7 @@ function iniciarUI(){
   $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedTap(b.dataset.id);});
   initArrastre();pdIniciar();
   $('ped-cats').addEventListener('click',e=>{if(e.target.closest('#ped-est'))mgrCodigo(()=>{pdId=null;pdVista='est';pdPintar();$('pd').classList.add('open');});});
+  $('ped-nombres').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='noms';pdPintar();$('pd').classList.add('open');}));
   $('ped-elim').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='elim';pdPintar();$('pd').classList.add('open');}));
   $('ped-cats').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const b=e.target.closest('.parea');if(b){pedCat=b.dataset.c;pedQ='';$('ped-search').value='';vib();renderPedido();}});
   $('ped-search').addEventListener('input',e=>{pedQ=e.target.value;renderPedido();});
