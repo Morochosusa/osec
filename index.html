@@ -200,6 +200,9 @@
   .nav-tab.active{background:var(--ac);border-color:var(--ac);color:#fff;}
   .chip-net{font-size:14px;font-weight:700;padding:10px 12px;border-radius:14px;white-space:nowrap;flex-shrink:0;}
   .chip-net.on{background:var(--okbg);color:var(--ok);} .chip-net.off{background:var(--erbg);color:var(--er);}
+  .parea-add{min-height:44px;margin:8px 10px;padding:0 14px;border:2px dashed var(--bd);background:transparent;border-radius:12px;font:inherit;font-size:14px;font-weight:700;color:var(--mu);cursor:pointer;flex:0 0 auto;}
+  .pd-emo{width:60px;min-height:52px;text-align:center;border-radius:12px;border:2px solid var(--bd);font-size:24px;background:#fff;} .pd-in2{flex:1;min-width:0;min-height:52px;border-radius:12px;border:2px solid var(--bd);padding:0 12px;font:inherit;font-size:18px;background:#fff;}
+  #rcx-sim{display:none;max-width:920px;margin:8px auto 4px;padding:12px 14px;border:2px dashed var(--wn);background:var(--wnbg);border-radius:14px;} .sim-t{font-weight:800;color:var(--wn);margin-bottom:8px} .sim-t small{font-weight:600;opacity:.8} .sim-r{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #f0d9a8} .sim-r .bt{min-height:48px;font-size:15px;white-space:nowrap} .sim-v{font-size:14px;color:var(--wn)}
   .chip-snd.on{background:var(--wn);border-color:var(--wn);color:#fff;}
   body.test::after{content:'';position:fixed;inset:0;border:4px solid var(--wn);pointer-events:none;z-index:9998;}
   #test-pill{display:none;white-space:nowrap;position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:9999;background:var(--wn);color:#fff;border:none;font:inherit;font-size:12px;font-weight:800;padding:3px 14px 4px;border-radius:0 0 12px 12px;cursor:pointer;}
@@ -926,6 +929,7 @@
     <button data-s="prov">🚚 Proveedores <i id="rcx-n-prov"></i></button>
   </div>
   <div id="rcx-fac">
+  <div id="rcx-sim"></div>
   <div class="section-head"><h2>Por recibir</h2><p>Despachos de Facility que llegaron a este local.</p></div>
   <div class="lbl">¿Quién recibe?</div>
   <div class="qrow" id="rec-quien"></div>
@@ -1986,7 +1990,7 @@ function testSet(on){
   document.body.classList.toggle('test',TEST);
   const b=document.getElementById('chip-test');if(b){b.classList.toggle('on',TEST);b.setAttribute('aria-pressed',TEST?'true':'false');}
   TLIS.forEach(rec=>tEmit(rec));
-  try{window.rxRefresh&&window.rxRefresh();}catch(e){}
+  try{window.rxRefresh&&window.rxRefresh();renderSim();}catch(e){}
   showToast(TEST?'🧪 Modo prueba: nada se guarda de verdad':'✅ Modo prueba apagado. Lo practicado se borró.');
 }
 let motivoSel='', turnoSel='', turnoTipsSel='', pendiente=null;
@@ -2783,6 +2787,10 @@ function iniciarCatalogo(){   // la lista base está en CATALOGO_TEXTO; aquí ll
     OVR={};snap.docs.forEach(d=>{OVR[d.id]=d.data();});
     aplicarOvr();renderPedido();renderInv();renderCfg();
   },err=>console.error('ajustes',err));
+  onSnapshot(doc(db,'pedido_orden','_global'),d=>{
+    const x=d&&typeof d.exists==='function'&&d.exists()?d.data():{};AREAS_CFG={nombres:x.nombres||{},extras:x.extras||[]};
+    aplicarOrdenListas(ULT_ORDEN);renderPedido();renderInv();pintarInvTabs();try{window.rxRefresh&&window.rxRefresh();}catch(e){}
+  },err=>console.error('estaciones',err));
   onSnapshot(doc(db,'pedido_orden',LOCAL_CODE[dispositivo.local]),d=>{aplicarOrdenListas(d&&typeof d.exists==='function'&&d.exists()?d.data():null);renderPedido();renderInv();renderCfg();},err=>console.error('pedido_orden',err));
 }
 // ⚙ Ajustes de productos: cambiar nombre y subir foto
@@ -2852,9 +2860,13 @@ try{pedOcultar=localStorage.getItem('ped_ocultar')==='1';}catch(_){}
 document.addEventListener('touchmove',e=>{if(dragActivo&&e.cancelable)e.preventDefault();},{passive:false});
 $('ped-grid')&&$('ped-grid').addEventListener('contextmenu',e=>e.preventDefault());
 $('ped-cats')&&$('ped-cats').addEventListener('contextmenu',e=>e.preventDefault());
+// Estaciones: las 4 de origen + las que se agreguen; los nombres se pueden cambiar (se guardan en pedido_orden/_global)
+let AREAS_CFG={nombres:{},extras:[]},ULT_ORDEN=null;
+const areasBase=()=>AREAS_BASE.map(([k,l])=>[k,(AREAS_CFG.nombres&&AREAS_CFG.nombres[k])||l]).concat((AREAS_CFG.extras||[]).filter(e=>e&&e[0]).map(e=>[e[0],e[1]]));
 function aplicarOrdenListas(o){
+  ULT_ORDEN=o;
   const ra=(o&&o.areas)||[],rs=(o&&o.secciones)||[];
-  AREAS=AREAS_BASE.map((a,i)=>({a,i})).sort((x,y)=>{const ix=ra.indexOf(x.a[0]),iy=ra.indexOf(y.a[0]);return ((ix<0?99:ix)-(iy<0?99:iy))||(x.i-y.i);}).map(x=>x.a);
+  AREAS=areasBase().map((a,i)=>({a,i})).sort((x,y)=>{const ix=ra.indexOf(x.a[0]),iy=ra.indexOf(y.a[0]);return ((ix<0?99:ix)-(iy<0?99:iy))||(x.i-y.i);}).map(x=>x.a);
   SEC_ORDEN=rs.length?rs.concat(SEC_BASE.filter(n=>rs.indexOf(n)<0)):SEC_BASE.slice();
 }
 function guardarOrdenListas(){
@@ -2989,7 +3001,7 @@ function renderPedido(){
   $('ped-cats').innerHTML=AREAS.map(([c,l])=>{const em=l.split(' ')[0],nom=l.slice(em.length+1);
     const tot=CAT.filter(p=>enArea(p,c)).length,sel=CAT.filter(p=>enArea(p,c)&&pedItems[p.id]!==undefined).length;
     const bt=`<button class="parea ${c===pedCat&&!sinAc(pedQ)?'act':''}" data-c="${esc(c)}"><span class="pa-ic">${em}</span><span class="pa-tx"><b>${esc(nom)}</b><small>${tot?(sel?sel+' por pedir':'Nada por pedir')+' · '+tot+' productos':'Sin productos'}</small></span></button>`;
-    return bt;}).join('');
+    return bt;}).join('')+'<button class="parea-add" id="ped-est">✎ Editar estaciones 🔒</button>';
   const q=sinAc(pedQ);
   const listaTodos=q?CAT.filter(p=>sinAc(p.nombre).includes(q)):CAT.filter(p=>enArea(p,pedCat));
   const lista=pedOcultar?listaTodos.filter(p=>pedItems[p.id]!==undefined):listaTodos;   // si buscas, busca en todas las áreas
@@ -3036,7 +3048,7 @@ function pdCerrar(){
 function pdPintar(){
   const p=pdP(),b=$('pd-body'),main=pdVista==='main';
   $('pd-back').style.visibility=main?'hidden':'visible';
-  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':pdVista==='elim'?'Productos eliminados':'Tamaño de paquete';
+  $('pd-title').textContent=main?'Detalle del producto':pdVista==='cat'?'Cambiar categoría':pdVista==='area'?'Mover a otra estación':pdVista==='elim'?'Productos eliminados':pdVista==='est'?'Estaciones':'Tamaño de paquete';
   $('pd-sub').textContent=main?'':(p.nombre||'');
   if(main){
     const q=pedItems[pdId]||0;
@@ -3056,6 +3068,10 @@ function pdPintar(){
     b.innerHTML=`<input type="search" class="pd-bus" id="pd-bus" placeholder="🔍 Buscar categorías" value="${esc(pdQ)}" autocomplete="off">
     <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>`;
     const bus=$('pd-bus');if(bus&&pdQ){bus.focus();bus.setSelectionRange(pdQ.length,pdQ.length);}
+  }else if(pdVista==='est'){
+    b.innerHTML=`<div class="pd-hint" style="margin:0 8px 12px">Cambia el nombre o el ícono de cada estación, o agrega una nueva. Los productos no se mueven. Toca <b>Listo</b> para guardar.</div>
+    <div class="pd-grp">${AREAS.map(([k,l])=>{const em=l.split(' ')[0],nm=l.slice(em.length+1);return `<div class="pd-row" style="gap:8px;cursor:default"><input class="pd-emo" data-ek="${esc(k)}" value="${esc(em)}" maxlength="4" aria-label="Ícono"><input class="pd-in2" data-en="${esc(k)}" value="${esc(nm)}" maxlength="30" aria-label="Nombre"></div>`;}).join('')}</div>
+    <div class="pd-sec" style="margin-top:22px">Agregar estación</div><div class="pd-grp"><div class="pd-row" style="gap:8px;cursor:default"><input class="pd-emo" id="est-nem" value="📍" maxlength="4"><input class="pd-in2" id="est-nnm" placeholder="Ej. Bodega fría" maxlength="30"></div></div>`;
   }else if(pdVista==='elim'){
     const el=CAT_TODOS.filter(x=>x.oculto&&enArea(x,pedCat));
     b.innerHTML=el.length?`<div class="pd-grp pd-lista">${el.map(x=>`<div class="pd-row" data-rest="${esc(x.id)}"><span class="pd-k">${esc(x.nombre)} <small style="color:var(--mu)">${esc(x.seccion||'')}</small></span><span class="pd-v" style="color:var(--ac);font-weight:700">↩ Restaurar</span></div>`).join('')}</div>`:'<div class="pd-hint" style="text-align:center;margin-top:30px">No hay productos eliminados en esta lista.</div>';
@@ -3074,8 +3090,22 @@ async function pdGuardar(campos){
   OVR[id]={...(OVR[id]||{}),...d};aplicarOvr();renderPedido();renderInv();vib();
   try{await setDoc(doc(db,'productos_ajustes',id),d,{merge:true});}catch(e){console.error(e);showToast('❌ No se pudo guardar');}
 }
+async function estGuardar(){
+  const nombres={},extras=(AREAS_CFG.extras||[]).map(e=>[e[0],e[1]]),baseK=AREAS_BASE.map(a=>a[0]);
+  document.querySelectorAll('#pd-body [data-en]').forEach(inp=>{
+    const k=inp.dataset.en,em=(document.querySelector(`#pd-body [data-ek="${k}"]`).value||'📍').trim(),nm=inp.value.trim();if(!nm)return;
+    const l=em+' '+nm;if(baseK.indexOf(k)>=0)nombres[k]=l;else{const x=extras.find(e=>e[0]===k);if(x)x[1]=l;}});
+  const nn=($('est-nnm')||{}).value;
+  if(nn&&nn.trim()){let k=sinAc(nn).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim()||'estacion';
+    if(areasBase().some(a=>sinAc(a[0])===k))k+=' 2';extras.push([k,(($('est-nem')||{}).value||'📍').trim()+' '+nn.trim()]);}
+  AREAS_CFG={nombres:Object.assign({},AREAS_CFG.nombres,nombres),extras};
+  aplicarOrdenListas(ULT_ORDEN);renderPedido();renderInv();pintarInvTabs();try{window.rxRefresh&&window.rxRefresh();}catch(e){}
+  try{await setDoc(doc(db,'pedido_orden','_global'),{nombres:AREAS_CFG.nombres,extras,actualizado:serverTimestamp()},{merge:true});showToast('✅ Estaciones guardadas');}
+  catch(e){console.error(e);showToast('❌ No se pudo guardar');}
+}
 function pdIniciar(){
   $('pd-done').addEventListener('click',()=>{
+    if(pdVista==='est')estGuardar();
     if(pdVista==='pack'){const i=$('pd-pack');if(i&&i.value.trim()!==(pdP().resto||''))pdGuardar({resto:i.value.trim()});}
     if(pdVista!=='main'&&pdId){pdVista='main';pdPintar();return;}
     pdCerrar();
@@ -3216,7 +3246,7 @@ function iniciarPedidos(){
   onSnapshot(query(collection(db,'pedidos_locales'),where('local','==',LOCAL_CODE[dispositivo.local])),snap=>{
     pedMios=snap.docs.map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>(b.fecha_envio?.toMillis?.()??Date.now())-(a.fecha_envio?.toMillis?.()??Date.now()));
-    renderMisPedidos();
+    renderMisPedidos();renderSim();
   },err=>console.error('pedidos_locales',err));
 }
 
@@ -3236,7 +3266,23 @@ function iniciarRecibir(){
     renderRec();
   },err=>console.error('pedidos',err));
 }
+function renderSim(){
+  const el=$('rcx-sim');if(!el)return;
+  if(!TEST){el.style.display='none';el.innerHTML='';return;}
+  const l=pedMios.filter(p=>['por_aprobar','enviado','en_proceso'].indexOf(p.estado)>=0);
+  el.style.display='block';
+  el.innerHTML='<div class="sim-t">🧪 Simulador de Facility <small>· solo prueba; en la vida real lo hace Facility EC</small></div>'+(l.length?l.map(p=>`<div class="sim-r"><div><b>${esc(numTxt(p))} · ${esc(p.estacion||'')}</b><br><small>${(p.items||[]).length} productos · ${esc((ESTADO_PED[p.estado]||['',''])[0])}</small></div>${p.estado==='por_aprobar'?'<small style="max-width:150px;text-align:right">Primero apruébalo en «Por revisar» (Pedido)</small>':`<button class="bt ok" data-sim="${esc(p.id)}">Aceptar y despachar</button>`}</div>`).join(''):'<div class="sim-v">No hay pedidos de práctica pendientes. Envía uno desde Pedido y apruébalo en «Por revisar»; luego vuelve aquí.</div>');
+}
+async function simDespachar(id){
+  const p=pedMios.find(x=>x.id===id);if(!TEST||!p)return;
+  const ref=doc(collection(db,'pedidos')),aj=p.ajustes||{};
+  await setDoc(ref,{local:p.local,estado:'despachado',pedido_local_id:id,numero:p.numero||null,estacion:p.estacion||'',despachado_por:'Facility (simulado)',fecha_despacho:serverTimestamp(),
+    items:(p.items||[]).map(i=>{const c=aj[i.producto_id]!==undefined&&aj[i.producto_id]!==null?aj[i.producto_id]:i.cantidad;return {...i,cantidad_pedida:i.cantidad,cantidad_despachada:c};}).filter(i=>i.cantidad_despachada>0)});
+  await setDoc(doc(db,'pedidos_locales',id),{estado:'procesado',despacho_id:ref.id},{merge:true});
+  beep(660,.15);vib(40);showToast('📦 Facility despachó el pedido (simulado). Ya aparece en «Por recibir».');
+}
 function renderRec(){
+  renderSim();
   if(!$('rec-lista'))return;
   const det=recAbierta?GUIAS.find(g=>g.id===recAbierta):null;
   $('rec-listado').style.display=det?'none':'block';$('rec-detalle').style.display=det?'block':'none';
@@ -3404,6 +3450,7 @@ function iniciarUI(){
   $('inv-save').addEventListener('click',invGuardar);
   $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedTap(b.dataset.id);});
   initArrastre();pdIniciar();
+  $('ped-cats').addEventListener('click',e=>{if(e.target.closest('#ped-est'))mgrCodigo(()=>{pdId=null;pdVista='est';pdPintar();$('pd').classList.add('open');});});
   $('ped-elim').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='elim';pdPintar();$('pd').classList.add('open');}));
   $('ped-cats').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const b=e.target.closest('.parea');if(b){pedCat=b.dataset.c;pedQ='';$('ped-search').value='';vib();renderPedido();}});
   $('ped-search').addEventListener('input',e=>{pedQ=e.target.value;renderPedido();});
@@ -3442,6 +3489,7 @@ function iniciarUI(){
   const testAlternar=()=>{vib(10);
     if(TEST){if(confirm('¿Salir del modo prueba?\nSe borra todo lo que practicaste (no estaba guardado).'))testSet(false);return;}
     openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}testSet(true);});};
+  $('rcx-sim').addEventListener('click',e=>{const b=e.target.closest('[data-sim]');if(b){b.disabled=true;simDespachar(b.dataset.sim);}});
   $('chip-test').addEventListener('click',testAlternar);$('test-pill').addEventListener('click',testAlternar);
   $('chip-snd').textContent=sonidoOn?'🔊':'🔇';actualizarRed();
 }
@@ -3859,9 +3907,12 @@ function iniciarPan(){
   $('invh-tabs').addEventListener('click',e=>{const b=e.target.closest('.qchip');if(!b)return;vib();panTab(b.dataset.t);});
   panTab('pan');
 }
+let INV_T='pan';
+function pintarInvTabs(){const el=$('invh-tabs');if(!el)return;
+  el.innerHTML=AREAS.map(([k,l])=>{const t=sinAc(k)==='panaderia produccion'?'pan':k;return `<button class="qchip ${t===INV_T?'sel':''}" data-t="${esc(t)}">${esc(l)}</button>`;}).join('');}
 function panTab(t){
-  PAN.tab=t==='pan'?'pan':'otro';
-  $('invh-tabs').innerHTML=[['pan','🥐 Panadería'],['cafetería','🧋 Cafetería'],['cocina','🍳 Cocina']].map(([k,l])=>`<button class="qchip ${k===t?'sel':''}" data-t="${k}">${l}</button>`).join('');
+  INV_T=t;PAN.tab=t==='pan'?'pan':'otro';
+  pintarInvTabs();
   $('pan-root').style.display=t==='pan'?'block':'none';$('inv-conteo').style.display=t==='pan'?'none':'block';
   if(t==='pan'){panSuscribir();renderPan();}else{invCat=t;invCargar();}
 }
@@ -3926,6 +3977,7 @@ const RX_A={
     const base=CAT_TODOS.filter(p=>!p.oculto&&sinAc(p.seccion)==='proveedores').map(p=>({id:p.id,nombre:p.nombre,unidad:unidadDe(p),uCompra:unidadDe(p),cons:'ambiente'}));
     return base.sort((a,b)=>a.nombre.localeCompare(b.nombre));
   },
+  areas:()=>AREAS.map(([k,l])=>[estKey(k),l]),
   teclado:(t,ini,uni,cb)=>openKeypad(t,ini,cb,uni),
   codigo:cb=>openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}cb();}),
   badge:n=>{_rxN=n;recBadges();},
@@ -3942,8 +3994,8 @@ const SV = () => A.SV();
 const INC = n => A.INC(n);
 const EMPRESA = 'morochos_ec';
 const BODEGA = { toString(){ return A.local(); } };   // código del local de este aparato (ej. la_victoria)
-const AREAS_RX = [['panaderia-produccion', '🥐 Panadería'], ['cafeteria', '☕ Cafetería'], ['cocina', '🍳 Cocina']];
-const areaNom = k => { const a = AREAS_RX.filter(x => x[0] === k)[0]; return a ? a[1].replace(/^\S+\s/, '') : String(k || ''); };
+const areasRx = () => { try { return A.areas(); } catch(e){ return []; } };
+const areaNom = k => { const a = areasRx().filter(x => x[0] === k)[0]; return a ? a[1].replace(/^\S+\s/, '') : String(k || ''); };
 const LSg = (k, d) => { try { const v = localStorage.getItem('rx_' + k); return v == null ? d : JSON.parse(v); } catch(e){ return d; } };
 const LSs = (k, v) => { try { localStorage.setItem('rx_' + k, JSON.stringify(v)); } catch(e){} };
 const ms = ts => ts && ts.toMillis ? ts.toMillis() : (ts && ts.seconds ? ts.seconds * 1000 : (typeof ts === 'number' ? ts : 0));
@@ -4153,7 +4205,7 @@ function vConfirmar(){
   return '<div class="rx-conf"><div class="rx-card rx-wide"><div class="rx-ph"><b>' + esc(d.proveedor) + '</b><span class="rx-mu">' + (d.comprobante.foto ? '📷 con comprobante' : (d.comprobante.excepcion ? '⚠ sin comprobante' : '')) + '</span></div>' + (d.documento ? '<div class="rx-mu">Factura ' + esc(d.documento) + '</div>' : '') + '</div>' +
     '<div class="rx-card rx-wide"><h3>Productos</h3>' + its.map((x, i) => '<div class="rx-sr"><span class="rx-no">' + (i + 1) + '</span><div class="rx-sn"><b>' + esc(x.it.nombre) + '</b><div class="rx-mu">' + (x.c.falt > 0 ? 'Faltan ' + fmt(x.c.falt) + ' · ' : '') + (x.c.sob > 0 ? 'Sobran ' + fmt(x.c.sob) + ' · ' : '') + (x.c.rech > 0 ? 'Rechazado ' + fmt(x.c.rech) + ' · ' : '') + (!x.it.vinculado ? '⏳ por vincular' : '') + '</div></div><div class="rx-sa"><b>' + fmt(x.c.acept) + '</b><small>' + esc(x.it.unidad) + '</small></div></div>').join('') +
     '<div class="rx-mu">' + (nDif ? '⚠ ' + nDif + ' con diferencias. ' : '✔ Todo coincide con la factura. ') + (sinVinc ? sinVinc + ' sin inventario configurado: se guardan pero no suman existencias hasta vincularlos.' : '') + '</div></div>' +
-    '<div class="rx-card"><h3>Área de inventario</h3><div class="rx-mu">Elige a qué inventario entra lo recibido.</div><div class="rx-chips">' + AREAS_RX.map(x => '<button class="rx-chip ' + (d.destino === x[0] ? 'on' : '') + '" data-rx="dest" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div></div>' +
+    '<div class="rx-card"><h3>Área de inventario</h3><div class="rx-mu">Elige a qué inventario entra lo recibido.</div><div class="rx-chips">' + areasRx().map(x => '<button class="rx-chip ' + (d.destino === x[0] ? 'on' : '') + '" data-rx="dest" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div></div>' +
     '<div class="rx-card"><h3>Responsable</h3><div class="rx-chips">' + nom.map(n => '<button class="rx-chip ' + (R.resp === n ? 'on' : '') + '" data-rx="resp" data-v="' + esc(n) + '">' + esc(n) + '</button>').join('') + '<button class="rx-chip ' + (otro ? 'on' : '') + '" data-rx="resp-otro">Otro</button></div>' +
     (otro ? '<input class="rx-in" id="rx-resp" placeholder="Nombre de quien recibe" autocomplete="off" value="' + esc(nom.indexOf(R.resp) < 0 ? R.resp : '') + '">' : '') + '<div class="rx-mu">' + (mail() ? 'Sesión: ' + esc(mail()) : '') + '</div></div>' +
     '<div class="rx-card"><h3>Observaciones <span class="rx-mu">(opcional)</span></h3><input class="rx-in" id="rx-obs" placeholder="Ej. entrega completa, buen estado" autocomplete="off" value="' + esc(d.observaciones) + '"></div></div>';
