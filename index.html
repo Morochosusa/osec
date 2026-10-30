@@ -3159,7 +3159,7 @@ function pedEnviar(){
     const dest=sinAc(p.seccion)==='proveedores'?provArea:porArea;(dest[k]=dest[k]||[]).push(it);});
   const refs=[],code=LOCAL_CODE[dispositivo.local];
   const creaciones=Promise.all(Object.entries(porArea).map(async([area,items])=>{
-    const ref=doc(collection(db,'pedidos_locales'));refs.push(ref);        // id generado aquí: funciona sin conexión
+    const ref=doc(collection(db,'pedidos_revision'));refs.push(ref);        // en revisión: Facility EC NO lo ve hasta que se aprueba · id generado aquí: funciona sin conexión
     const numero=await sigNumero();
     return setDoc(ref,{local:code,numero,estacion:areaNombre(area),estado:'por_aprobar',enviado_por:areaNombre(area)+' · '+dispositivo.local,
       fecha_envio:serverTimestamp(),nota:'',items,ajustes:{},compra_lista_id:null,despacho_id:null})
@@ -3195,7 +3195,7 @@ function pedBorrar(id){
   openKeypad('Código del manager',0,async v=>{
     if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}
     if(!confirm('¿Eliminar esta lista de '+(p.estacion||'')+' ('+fechaTxt(p.fecha_envio)+')?\nNo se puede deshacer.'))return;
-    try{await deleteDoc(doc(db,'pedidos_locales',id));if(revSel===id)revSel=null;vib(30);showToast('🗑 Lista eliminada');}
+    try{await deleteDoc(doc(db,colPed(id),id));if(revSel===id)revSel=null;vib(30);showToast('🗑 Lista eliminada');}
     catch(e){console.error(e);showToast('❌ No se pudo eliminar la lista');}
   });
 }
@@ -3252,22 +3252,27 @@ async function revAprobar(id){
   const items=(p.items||[]).map((it,k)=>({...it,cantidad:ed[k]!==undefined?ed[k]:it.cantidad})).filter(it=>it.cantidad>0);
   if(!items.length){showToast('⚠️ El pedido quedó vacío. Recházalo si no se envía.');return;}
   const eliminados=(p.items||[]).filter((it,k)=>ed[k]===0).map(it=>({producto_id:it.producto_id,producto_nombre:it.producto_nombre,cantidad_pedida:it.cantidad,unidad_medida:it.unidad_medida}));
-  try{await setDoc(doc(db,'pedidos_locales',id),{items,eliminados,estado:'enviado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()},{merge:true});
+  try{const {id:_i,...base}=p;                                   // recién ahora pasa a pedidos_locales (lo que lee Facility EC)
+    await setDoc(doc(db,'pedidos_locales',id),{...base,items,eliminados,estado:'enviado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()});
+    await deleteDoc(doc(db,'pedidos_revision',id)).catch(e=>console.warn('revision',e));
     delete revEdit[id];revSel=null;beep(988,.15);vib(40);showToast('✅ Pedido enviado a Facility');
     if(!pedMios.some(x=>x.id!==id&&x.estado==='por_aprobar'))ovCerrar();else renderOv();}
   catch(e){console.error(e);showToast('❌ No se pudo enviar');}
 }
 async function revRechazar(id){
-  try{await setDoc(doc(db,'pedidos_locales',id),{estado:'rechazado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()},{merge:true});delete revEdit[id];revSel=null;showToast('Pedido rechazado');renderOv();}
+  try{await setDoc(doc(db,'pedidos_revision',id),{estado:'rechazado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()},{merge:true});delete revEdit[id];revSel=null;showToast('Pedido rechazado');renderOv();}
   catch(e){showToast('❌ No se pudo rechazar');}
 }
+let PM_LOC=[],PM_REV=[];
+const colPed=id=>PM_REV.some(x=>x.id===id)?'pedidos_revision':'pedidos_locales';
 function iniciarPedidos(){
   cargarBorrador();
-  onSnapshot(query(collection(db,'pedidos_locales'),where('local','==',LOCAL_CODE[dispositivo.local])),snap=>{
-    pedMios=snap.docs.map(d=>({id:d.id,...d.data()}))
+  const unir=()=>{pedMios=[...PM_REV,...PM_LOC.filter(x=>!PM_REV.some(r=>r.id===x.id))]
       .sort((a,b)=>(b.fecha_envio?.toMillis?.()??Date.now())-(a.fecha_envio?.toMillis?.()??Date.now()));
-    renderMisPedidos();renderSim();
-  },err=>console.error('pedidos_locales',err));
+    renderMisPedidos();renderSim();};
+  const q=c=>query(collection(db,c),where('local','==',LOCAL_CODE[dispositivo.local]));
+  onSnapshot(q('pedidos_locales'),snap=>{PM_LOC=snap.docs.map(d=>({id:d.id,...d.data()}));unir();},err=>console.error('pedidos_locales',err));
+  onSnapshot(q('pedidos_revision'),snap=>{PM_REV=snap.docs.map(d=>({id:d.id,...d.data()}));unir();},err=>console.error('pedidos_revision',err));
 }
 
 // ═══════════════════════════════════════════════
@@ -3289,7 +3294,7 @@ function iniciarRecibir(){
 function renderSim(){
   const el=$('rcx-sim');if(!el)return;
   if(!TEST){el.style.display='none';el.innerHTML='';return;}
-  const l=pedMios.filter(p=>['por_aprobar','enviado','en_proceso'].indexOf(p.estado)>=0);
+  const l=pedMios.filter(p=>['enviado','en_proceso'].indexOf(p.estado)>=0);
   el.style.display='block';
   el.innerHTML='<div class="sim-t">🧪 Simulador de Facility <small>· solo prueba; en la vida real lo hace Facility EC</small></div>'+(l.length?l.map(p=>`<div class="sim-r"><div><b>${esc(numTxt(p))} · ${esc(p.estacion||'')}</b><br><small>${(p.items||[]).length} productos · ${esc((ESTADO_PED[p.estado]||['',''])[0])}</small></div>${p.estado==='por_aprobar'?'<small style="max-width:150px;text-align:right">Primero apruébalo en «Por revisar» (Pedido)</small>':`<button class="bt ok" data-sim="${esc(p.id)}">Aceptar y despachar</button>`}</div>`).join(''):'<div class="sim-v">No hay pedidos de práctica pendientes. Envía uno desde Pedido y apruébalo en «Por revisar»; luego vuelve aquí.</div>');
 }
