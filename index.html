@@ -3153,15 +3153,16 @@ const areaNombre=k=>{const a=AREAS.find(x=>sinAc(x[0])===sinAc(k));return a?a[1]
 function pedEnviar(){
   const ids=Object.keys(pedItems).filter(id=>CAT.some(p=>p.id===id));
   if(!ids.length){showToast('⚠️ Agrega al menos un producto');return;}
-  const porArea={},provArea={};   // Facility: un pedido por área (cada uno se revisa aparte) · Proveedores: va directo a Recepción
+  const porArea={},provArea={};   // Facility: UNA sola lista con todas las áreas (se revisa junta) · Proveedores: va directo a Recepción
   ids.forEach(id=>{const p=CAT.find(x=>x.id===id),k=p.categoria||'general',
     it={producto_id:id,producto_nombre:p.nombre,unidad_medida:p.unidad_medida||'',categoria:p.categoria||'',subcategoria:p.subcategoria||'',seccion:p.seccion||'',cantidad:pedItems[id],nota:''};
-    const dest=sinAc(p.seccion)==='proveedores'?provArea:porArea;(dest[k]=dest[k]||[]).push(it);});
+    if(sinAc(p.seccion)==='proveedores')(provArea[k]=provArea[k]||[]).push(it);else(porArea.todas=porArea.todas||[]).push(it);});
   const refs=[],code=LOCAL_CODE[dispositivo.local];
-  const creaciones=Promise.all(Object.entries(porArea).map(async([area,items])=>{
+  const creaciones=Promise.all(Object.entries(porArea).map(async([_k,items])=>{
+    const aks=[...new Set(items.map(i=>i.categoria))],lab=aks.length===1?areaNombre(aks[0]):'Lista completa';
     const ref=doc(collection(db,'pedidos_revision'));refs.push(ref);        // en revisión: Facility EC NO lo ve hasta que se aprueba · id generado aquí: funciona sin conexión
-    const numero=await sigNumero();
-    return setDoc(ref,{local:code,numero,estacion:areaNombre(area),estado:'por_aprobar',enviado_por:areaNombre(area)+' · '+dispositivo.local,
+    const numero=(await sigNumero())||(Math.max(0,...pedMios.map(x=>+x.numero||0))+1);   // sin contador/sin conexión: siguiente número local
+    return setDoc(ref,{local:code,numero,estacion:lab,estado:'por_aprobar',enviado_por:lab+' · '+dispositivo.local,
       fecha_envio:serverTimestamp(),nota:'',items,ajustes:{},compra_lista_id:null,despacho_id:null})
       .catch(e=>{console.error(e);showToast('❌ No se pudo enviar el pedido');});}).concat(Object.entries(provArea).map(async([area,items])=>{
     const ref=doc(collection(db,'recepciones_bodega'));refs.push(ref);
@@ -3175,12 +3176,16 @@ function pedEnviar(){
       .catch(e=>{console.error(e);showToast('❌ No se pudo enviar la lista de proveedores');});})));
   const respaldo={...pedItems},hayProv=Object.keys(provArea).length>0,hayFac=Object.keys(porArea).length>0;
   pedItems={};guardarBorrador();renderPedido();beep(988,.15);vib(40);
-  showUndo(hayFac&&hayProv?'Enviado a revisión · Proveedores pasó a Recepción › Por recibir':hayProv?'Lista de proveedores enviada a Recepción › Por recibir':'Enviado a revisión del encargado',async()=>{await creaciones;await Promise.all(refs.map(r=>deleteDoc(r)));pedItems=respaldo;guardarBorrador();renderPedido();});
+  showUndo(hayFac&&hayProv?'Enviado a revisión · Proveedores pasó a Recepción › Por recibir':hayProv?'Lista de proveedores enviada a Recepción › Por recibir':'Enviado a revisión · una sola lista',async()=>{await creaciones;await Promise.all(refs.map(r=>deleteDoc(r)));pedItems=respaldo;guardarBorrador();renderPedido();});
 }
 // Sección (Mercado / Facility / Bodega…) de cada producto de un pedido; los pedidos viejos no la guardan, se busca en el catálogo
 const secItem=i=>i.seccion||(CAT_TODOS.find(x=>x.id===i.producto_id)||{}).seccion||({mercado:'Mercado',facility:'Facility',bodega:'Bodega'}[i.subcategoria])||'Otros';
 const secOrd=a=>{const x=SEC_ORDEN.indexOf(a);return x<0?99:x;};
-function porSecciones(items){const g={};items.forEach((it,k)=>{const sc=secItem(it);(g[sc]=g[sc]||[]).push([it,k]);});return Object.keys(g).sort((a,b)=>secOrd(a)-secOrd(b)||a.localeCompare(b)).map(sc=>[sc,g[sc]]);}
+function porSecciones(items){
+  const multi=new Set(items.map(i=>sinAc(i.categoria||''))).size>1,aOrd=c=>{const x=AREAS.findIndex(a=>sinAc(a[0])===sinAc(c||''));return x<0?99:x;};
+  const g={};items.forEach((it,k)=>{const sc=secItem(it),key=multi?aOrd(it.categoria)+'|'+areaNombre(it.categoria)+' › '+sc:sc;(g[key]=g[key]||[]).push([it,k]);});
+  const lab=key=>multi?key.slice(key.indexOf('|')+1):key;
+  return Object.keys(g).sort((a,b)=>multi?(parseInt(a)-parseInt(b)||secOrd(a.split('› ').pop())-secOrd(b.split('› ').pop())):(secOrd(a)-secOrd(b)||a.localeCompare(b))).map(k=>[lab(k),g[k]]);}
 const numTxt=p=>p&&p.numero?'#'+p.numero:'#—';
 const numHtml=p=>`<span class="mp-num ${p&&p.numero?'':'sn'}">${esc(numTxt(p))}</span>`;
 let mpAbierto=new Set();
@@ -3233,7 +3238,7 @@ function renderOv(){
   const p=revSel?l.find(x=>x.id===revSel):null;
   if(!p){
     tit.textContent='📋 Por revisar';
-    body.innerHTML=l.map(x=>`<div class="guia-row"><button class="guia" data-abrir="${esc(x.id)}"><div>${numHtml(x)}<b>${esc(x.estacion||'')}</b> · ${fechaTxt(x.fecha_envio)}<br><small>${(x.items||[]).length} productos</small></div><span class="tag wn">Revisar ›</span></button><button class="rev-x" data-delped="${esc(x.id)}" aria-label="Eliminar lista">🗑</button></div>`).join('')
+    body.innerHTML=l.map((x,ix)=>`<div class="guia-row"><button class="guia" data-abrir="${esc(x.id)}"><div>${numHtml(x.numero?x:{numero:l.length-ix})}<b>${esc(x.estacion||'')}</b> · ${fechaTxt(x.fecha_envio)}<br><small>${(x.items||[]).length} productos</small></div><span class="tag wn">Revisar ›</span></button><button class="rev-x" data-delped="${esc(x.id)}" aria-label="Eliminar lista">🗑</button></div>`).join('')
       ||'<div class="vacio">No hay pedidos por revisar. 🎉</div>';
     return;
   }
@@ -3242,7 +3247,7 @@ function renderOv(){
   const nQuitar=(p.items||[]).filter((i,k)=>(ed[k]!==undefined?ed[k]:i.cantidad)===0).length;
   body.innerHTML=`<button class="bt" data-volver style="margin-bottom:8px">‹ Volver a la lista</button><p style="color:var(--mu);font-size:16px;margin-bottom:6px">Toca un producto para cambiar la cantidad. Usa <b>Quitar</b> si ya hay en stock y no hace falta pedirlo.</p>
     <div class="plist" style="border:2px solid var(--bd);border-radius:14px;padding:0 12px">`+porSecciones(p.items||[]).map(([sc,arr])=>`<div class="mp-sec">🗂 ${esc(sc)}</div>`+arr.map(([i,k])=>{const c=ed[k]!==undefined?ed[k]:i.cantidad;
-    const st=invStock[estKey(p.estacion||i.categoria)+'__'+i.producto_id];
+    const st=invStock[estKey(i.categoria||p.estacion)+'__'+i.producto_id];
     return `<div class="rev-row ${c===0?'off':''}"><button class="rev-it ${c===0?'off':''}" data-o="${esc(p.id)}" data-k="${k}"><span>${esc(i.producto_nombre)}${st!==undefined?`<span class="rev-st">En sistema: ${fmtN(st)}</span>`:''}</span><span><b>${fmtN(c)}</b> ${esc(i.unidad_medida)} ✎</span></button><button class="rev-x" data-del="${esc(p.id)}" data-k="${k}">${c===0?'↩ Volver':'🗑 Quitar'}</button></div>`;}).join('')).join('')+`</div>`+(nQuitar?`<p class="rev-n">${nQuitar} producto${nQuitar===1?'':'s'} se quitará${nQuitar===1?'':'n'} del pedido al aprobar.</p>`:'');
   foot.innerHTML=`<button class="bt er" data-rej="${esc(p.id)}">Rechazar</button><button class="bt ok" data-apr="${esc(p.id)}">✔ Aprobar y enviar a Facility</button>`;
 }
