@@ -823,6 +823,34 @@
   .pan-hb.sel{border-color:var(--ok);background:var(--okbg);} .pan-hb .pnum{display:inline-block;min-width:24px;text-align:center;background:var(--ac);color:#fff;border-radius:8px;font-size:13px;padding:1px 5px;}
   .pan-resp{border:2px solid var(--ac) !important;} .pan-resp .qchip{min-height:48px;font-size:16px;}
   @media (max-width:900px){.pan-grid,.pan-steps{grid-template-columns:1fr;}.pan-4{flex-basis:100%}.pan-row.dist{flex-wrap:wrap}}
+
+  /* ═══ Pedido compacto (móvil primero): lista densa como una app de compras; más productos a la vista ═══ */
+  @media (max-width:600px){
+    #page-pedido.page{padding-top:4px;}
+    #page-pedido .ped-top{gap:6px;} #page-pedido .ped-top .bt{min-height:36px;font-size:14px;border-radius:10px;}
+    #page-pedido .ped2{margin:4px 0 0;}
+    #page-pedido .ped-left{padding:0 10px 4px;}
+    #page-pedido .ped-left .form-control{min-height:38px;font-size:16px;margin-bottom:4px;border-radius:10px;}
+    #page-pedido .parea{min-height:36px;padding:2px 12px 2px 8px;gap:5px;border-width:1.5px;border-radius:18px;}
+    #page-pedido .pa-ic{font-size:18px;} #page-pedido .pa-tx b{font-size:15px;}
+    #page-pedido .pr-head{padding:4px 12px 0;} #page-pedido .pr-title{font-size:16px;} #page-pedido .pr-sub{font-size:14px;}
+    #page-pedido .ped-tools{top:56px;padding:4px 10px 6px;} #page-pedido .ped-tools .bt{min-height:36px;font-size:14px;border-radius:10px;}
+    #ped-grid{padding:0;}
+    #page-pedido .secblk{margin:0;}
+    #page-pedido .sec-h{top:98px;margin:0;border-radius:0;text-align:center;font-size:15px;font-weight:700;padding:6px 12px;}
+    #page-pedido .plist{border:none;border-radius:0;}
+    #page-pedido .prow{min-height:48px;} #page-pedido .prow:not(:last-child){border-bottom:1px solid var(--bd);}
+    #page-pedido .pr-th{width:48px;min-height:48px;font-size:15px;}
+    #page-pedido .pr-main{padding:3px 10px;gap:0 6px;} #page-pedido .pr-n{font-size:16px;line-height:1.2;} #page-pedido .pr-d{font-size:14px;} #page-pedido .pr-d b{font-size:15px;}
+    #page-pedido .pr-ed{width:46px;min-height:48px;font-size:19px;}
+    #ped-nombres,#ped-elim{min-height:40px !important;}
+  }
+  /* Tableta / computador: la misma lista densa, centrada y sin franjas enormes */
+  @media (min-width:601px){
+    #page-pedido .prow{min-height:46px;} #page-pedido .pr-th{width:46px;min-height:46px;font-size:15px;}
+    #page-pedido .pr-n{font-size:16px;} #page-pedido .pr-d{font-size:14px;} #page-pedido .pr-ed{min-height:46px;width:50px;}
+    #page-pedido .sec-h{padding:5px 12px;font-size:14px;}
+  }
 </style>
 </head>
 <body>
@@ -1512,7 +1540,7 @@ function deshacer(id){
   try { alDeshacer(r); } catch(e){ console.error(e); }
 }
 function flash(kind, text){ const f = $('#pr-flash'); if(!f) return; f.className = 'pr-flash ' + kind + ' show'; f.innerHTML = '<div>' + ic(kind === 'ok' ? 'check' : 'x', 150) + '</div><div class="ft">' + text + '</div>'; clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 800); }
-function toast(msg){ const t = $('#pr-toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+function toast(msg){ if(!/^🔒|no se pudo|no salió|incorrecto|elige|pon |primero|ya no se puede|sin etiqueta|impresión/i.test(String(msg||''))) return; const t = $('#pr-toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
 function showSnack(r){
   const s = $('#pr-snack'); if(!s) return;
   s.innerHTML = '<div class="snackbox"><div class="st">' + fmt(r.cant) + ' ' + esc(r.unidad) + ' · ' + esc(r.nombre) + '</div><button class="btn" data-act="undo" data-id="' + r.id + '">Deshacer</button><div class="snackbar"></div></div>';
@@ -2133,7 +2161,9 @@ function prefillLocal(){
   document.getElementById('tp-local-field').style.display='none';
 }
 
-function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+// Solo se muestran avisos que la persona necesita (errores, faltantes, bloqueos). Las confirmaciones de acciones ya no salen.
+const TOAST_OK=/^(⚠️|❌|📴|🔒)|no se pudo|incorrecto|sin conexi/i;
+function showToast(m){if(!TOAST_OK.test(String(m||'')))return;const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 function openPhoto(url){window.open(url,'_blank','noopener');}
 
 function showPage(id){
