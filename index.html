@@ -2163,7 +2163,7 @@ function prefillLocal(){
 
 // Solo se muestran avisos que la persona necesita (errores, faltantes, bloqueos). Las confirmaciones de acciones ya no salen.
 const TOAST_OK=/^(⚠️|❌|📴|🔒)|no se pudo|incorrecto|sin conexi/i;
-function showToast(m){if(!TOAST_OK.test(String(m||'')))return;const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+function showToast(m){if(!TOAST_OK.test(String(m||'')))return;const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(showToast._t);showToast._t=setTimeout(()=>t.classList.remove('show'),2500);}
 function openPhoto(url){window.open(url,'_blank','noopener');}
 
 function showPage(id){
@@ -2432,7 +2432,7 @@ let _undoT=null,_undoFn=null;
 function showUndo(msg,fn){
   const u=$('undo-bar');$('undo-msg').textContent=msg;_undoFn=fn;u.classList.add('show');
   $('undo-btn').style.display=fn?'block':'none';
-  clearTimeout(_undoT);_undoT=setTimeout(()=>{u.classList.remove('show');_undoFn=null;},10000);
+  clearTimeout(_undoT);_undoT=setTimeout(()=>{u.classList.remove('show');_undoFn=null;},5000);
 }
 async function undoPress(){
   const fn=_undoFn;if(!fn)return;_undoFn=null;clearTimeout(_undoT);$('undo-bar').classList.remove('show');vib(30);
@@ -3179,6 +3179,7 @@ function qtyCerrar(){
   if(qtyId&&!(pedItems[qtyId]>0))delete pedItems[qtyId];
   guardarBorrador();$('qm').classList.remove('open');qtyId=null;renderPedido();
 }
+const estLabItems=items=>{const ks=[];(items||[]).forEach(i=>{const k=sinAc(i.categoria||'');if(k&&!ks.some(x=>sinAc(x)===k))ks.push(i.categoria);});const o=k=>{const x=AREAS.findIndex(a=>sinAc(a[0])===sinAc(k));return x<0?99:x;};return ks.sort((a,b)=>o(a)-o(b)).map(areaNombre).join(' + ')||'Pedido';};
 const areaNombre=k=>{const a=AREAS.find(x=>sinAc(x[0])===sinAc(k));return a?a[1].slice(a[1].indexOf(' ')+1):String(k||'');};
 function pedEnviar(){
   const ids=Object.keys(pedItems).filter(id=>CAT.some(p=>p.id===id));
@@ -3189,7 +3190,7 @@ function pedEnviar(){
     if(sinAc(p.seccion)==='proveedores')(provArea[k]=provArea[k]||[]).push(it);else(porArea.todas=porArea.todas||[]).push(it);});
   const refs=[],code=LOCAL_CODE[dispositivo.local];
   const creaciones=Promise.all(Object.entries(porArea).map(async([_k,items])=>{
-    const aks=[...new Set(items.map(i=>i.categoria))],lab=aks.length===1?areaNombre(aks[0]):'Lista completa';
+    const lab=estLabItems(items);
     const ref=doc(collection(db,'pedidos_revision'));refs.push(ref);        // en revisión: Facility EC NO lo ve hasta que se aprueba · id generado aquí: funciona sin conexión
     const numero=(await sigNumero())||(Math.max(0,...pedMios.map(x=>+x.numero||0))+1);   // sin contador/sin conexión: siguiente número local
     return setDoc(ref,{local:code,numero,estacion:lab,estado:'por_aprobar',enviado_por:lab+' · '+dispositivo.local,
@@ -3302,7 +3303,7 @@ let PM_LOC=[],PM_REV=[];
 const colPed=id=>PM_REV.some(x=>x.id===id)?'pedidos_revision':'pedidos_locales';
 function iniciarPedidos(){
   cargarBorrador();
-  const unir=()=>{pedMios=[...PM_REV,...PM_LOC.filter(x=>!PM_REV.some(r=>r.id===x.id))]
+  const unir=()=>{pedMios=[...PM_REV,...PM_LOC.filter(x=>!PM_REV.some(r=>r.id===x.id))].map(x=>(!x.estacion||x.estacion==='Lista completa')?{...x,estacion:estLabItems(x.items)}:x)
       .sort((a,b)=>(b.fecha_envio?.toMillis?.()??Date.now())-(a.fecha_envio?.toMillis?.()??Date.now()));
     renderMisPedidos();renderSim();};
   const q=c=>query(collection(db,c),where('local','==',LOCAL_CODE[dispositivo.local]));
@@ -3413,7 +3414,7 @@ async function recAceptar(){
     lastRec={gid:g.id,mpIds,original,agg:Object.fromEntries(Object.entries(agg).map(([k,v])=>[k,v.sum])),ek:Object.fromEntries(Object.entries(agg).map(([k,v])=>[k,v.ek]))};
     const gid=g.id;recib={};recAbierta=null;beep(988,.15);vib(40);renderRec();
     showUndo('Recepción guardada',()=>recDeshacer(gid));
-    setTimeout(()=>{if(lastRec&&lastRec.gid===gid)lastRec=null;},10500);
+    setTimeout(()=>{if(lastRec&&lastRec.gid===gid)lastRec=null;},5500);
   }catch(e){
     console.error(e);
     if(e.message==='YA'){showToast('⚠️ Ya fue recibida');recAbierta=null;recib={};renderRec();}
