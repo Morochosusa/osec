@@ -3181,33 +3181,32 @@ function qtyCerrar(){
 }
 const estLabItems=items=>{const ks=[];(items||[]).forEach(i=>{const k=sinAc(i.categoria||'');if(k&&!ks.some(x=>sinAc(x)===k))ks.push(i.categoria);});const o=k=>{const x=AREAS.findIndex(a=>sinAc(a[0])===sinAc(k));return x<0?99:x;};return ks.sort((a,b)=>o(a)-o(b)).map(areaNombre).join(' + ')||'Pedido';};
 const areaNombre=k=>{const a=AREAS.find(x=>sinAc(x[0])===sinAc(k));return a?a[1].slice(a[1].indexOf(' ')+1):String(k||'');};
+// Recepción › Por recibir: la lista de Proveedores se crea cuando el encargado APRUEBA y el pedido sale a Facility
+function provDoc(area,items,pnum){
+  const code=LOCAL_CODE[dispositivo.local];
+  return {empresa:'morochos_ec',bodega:code,local:code,establecimiento:code,modulo:'rx1',estado:'por_recibir',origen:'pedido',pedido_numero:pnum?'P'+pnum:null,pedido_estacion:areaNombre(area),
+    destino:estKey(area),proveedor:'',proveedor_id:null,documento:'',comprobante:{foto:false,excepcion:null},
+    items:items.map(i=>({producto_id:i.producto_id,nombre:i.producto_nombre,unidad:i.unidad_medida||'unidades',facturado:null,recibido:null,rechazado:0,motivos:[],motivo_texto:'',destino:'directo',provisional:false,vinculado:true,revisado:false,
+      conservacion:'ambiente',temperatura_c:null,peso_valor:0,peso_unidad:'kg',lote_proveedor:'',vence:'',nota_item:'',pedido:i.cantidad,seccion:i.seccion})),
+    observaciones:'',responsable:'',creado_por_email:'',orden_compra_id:null,paso:1,historial:[{ts:new Date().toISOString(),accion:'lista aprobada y enviada a Facility',por:areaNombre(area)+' · '+dispositivo.local,detalle:''}],
+    fecha_creacion:serverTimestamp(),fecha_actividad:serverTimestamp()};
+}
 function pedEnviar(){
   const ids=Object.keys(pedItems).filter(id=>CAT.some(p=>p.id===id));
   if(!ids.length){showToast('⚠️ Agrega al menos un producto');return;}
-  const porArea={},provArea={};   // Facility: UNA sola lista con todas las áreas (se revisa junta) · Proveedores: va directo a Recepción
-  ids.forEach(id=>{const p=CAT.find(x=>x.id===id),k=p.categoria||'general',
-    it={producto_id:id,producto_nombre:p.nombre,unidad_medida:p.unidad_medida||'',categoria:p.categoria||'',subcategoria:p.subcategoria||'',seccion:p.seccion||'',cantidad:pedItems[id],nota:''};
-    if(sinAc(p.seccion)==='proveedores')(provArea[k]=provArea[k]||[]).push(it);else(porArea.todas=porArea.todas||[]).push(it);});
-  const refs=[],code=LOCAL_CODE[dispositivo.local];
-  const creaciones=Promise.all(Object.entries(porArea).map(async([_k,items])=>{
-    const lab=estLabItems(items);
-    const ref=doc(collection(db,'pedidos_revision'));refs.push(ref);        // en revisión: Facility EC NO lo ve hasta que se aprueba · id generado aquí: funciona sin conexión
+  // UNA sola lista con todas las áreas y categorías (Mercado, Facility, Bodega, Proveedores): se revisa junta y, al aprobar, va a Facility EC
+  const items=ids.map(id=>{const p=CAT.find(x=>x.id===id);
+    return {producto_id:id,producto_nombre:p.nombre,unidad_medida:p.unidad_medida||'',categoria:p.categoria||'',subcategoria:p.subcategoria||'',seccion:p.seccion||'',cantidad:pedItems[id],nota:''};});
+  const code=LOCAL_CODE[dispositivo.local],lab=estLabItems(items);
+  const ref=doc(collection(db,'pedidos_revision'));        // en revisión: Facility EC NO lo ve hasta que se aprueba · id generado aquí: funciona sin conexión
+  const creacion=(async()=>{
     const numero=(await sigNumero())||(Math.max(0,...pedMios.map(x=>+x.numero||0))+1);   // sin contador/sin conexión: siguiente número local
     return setDoc(ref,{local:code,numero,estacion:lab,estado:'por_aprobar',enviado_por:lab+' · '+dispositivo.local,
       fecha_envio:serverTimestamp(),nota:'',items,ajustes:{},compra_lista_id:null,despacho_id:null})
-      .catch(e=>{console.error(e);showToast('❌ No se pudo enviar el pedido');});}).concat(Object.entries(provArea).map(async([area,items])=>{
-    const ref=doc(collection(db,'recepciones_bodega'));refs.push(ref);
-    const numero=await sigNumero('pedidos_prov');
-    return setDoc(ref,{empresa:'morochos_ec',bodega:code,local:code,establecimiento:code,modulo:'rx1',estado:'por_recibir',origen:'pedido',pedido_numero:numero?'P'+numero:null,pedido_estacion:areaNombre(area),
-      destino:estKey(area),proveedor:'',proveedor_id:null,documento:'',comprobante:{foto:false,excepcion:null},
-      items:items.map(i=>({producto_id:i.producto_id,nombre:i.producto_nombre,unidad:i.unidad_medida||'unidades',facturado:null,recibido:null,rechazado:0,motivos:[],motivo_texto:'',destino:'directo',provisional:false,vinculado:true,revisado:false,
-        conservacion:'ambiente',temperatura_c:null,peso_valor:0,peso_unidad:'kg',lote_proveedor:'',vence:'',nota_item:'',pedido:i.cantidad,seccion:i.seccion})),
-      observaciones:'',responsable:'',creado_por_email:'',orden_compra_id:null,paso:1,historial:[{ts:new Date().toISOString(),accion:'lista enviada desde Pedido',por:areaNombre(area)+' · '+dispositivo.local,detalle:''}],
-      fecha_creacion:serverTimestamp(),fecha_actividad:serverTimestamp()})
-      .catch(e=>{console.error(e);showToast('❌ No se pudo enviar la lista de proveedores');});})));
-  const respaldo={...pedItems},hayProv=Object.keys(provArea).length>0,hayFac=Object.keys(porArea).length>0;
+      .catch(e=>{console.error(e);showToast('❌ No se pudo enviar el pedido');});})();
+  const respaldo={...pedItems};
   pedItems={};guardarBorrador();renderPedido();beep(988,.15);vib(40);
-  showUndo(hayFac&&hayProv?'Enviado a revisión · Proveedores pasó a Recepción › Por recibir':hayProv?'Lista de proveedores enviada a Recepción › Por recibir':'Enviado a revisión · una sola lista',async()=>{await creaciones;await Promise.all(refs.map(r=>deleteDoc(r)));pedItems=respaldo;guardarBorrador();renderPedido();});
+  showUndo('Enviado a revisión',async()=>{await creacion;await deleteDoc(ref);pedItems=respaldo;guardarBorrador();renderPedido();});
 }
 // Sección (Mercado / Facility / Bodega…) de cada producto de un pedido; los pedidos viejos no la guardan, se busca en el catálogo
 const secItem=i=>i.seccion||(CAT_TODOS.find(x=>x.id===i.producto_id)||{}).seccion||({mercado:'Mercado',facility:'Facility',bodega:'Bodega'}[i.subcategoria])||'Otros';
@@ -3291,6 +3290,8 @@ async function revAprobar(id){
   try{const {id:_i,...base}=p;                                   // recién ahora pasa a pedidos_locales (lo que lee Facility EC)
     await setDoc(doc(db,'pedidos_locales',id),{...base,items,eliminados,estado:'enviado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()});
     await deleteDoc(doc(db,'pedidos_revision',id)).catch(e=>console.warn('revision',e));
+    const pv={};items.filter(it=>sinAc(it.seccion||secItem(it))==='proveedores').forEach(it=>{const k=it.categoria||'general';(pv[k]=pv[k]||[]).push(it);});
+    await Promise.all(Object.entries(pv).map(([k,l])=>setDoc(doc(collection(db,'recepciones_bodega')),provDoc(k,l,p.numero)).catch(e=>console.error('por_recibir',e))));
     delete revEdit[id];revSel=null;beep(988,.15);vib(40);showToast('✅ Pedido enviado a Facility');
     if(!pedMios.some(x=>x.id!==id&&x.estado==='por_aprobar'))ovCerrar();else renderOv();}
   catch(e){console.error(e);showToast('❌ No se pudo enviar');}
@@ -3338,7 +3339,7 @@ async function simDespachar(id){
   const p=pedMios.find(x=>x.id===id);if(!TEST||!p)return;
   const ref=doc(collection(db,'pedidos')),aj=p.ajustes||{};
   await setDoc(ref,{local:p.local,estado:'despachado',pedido_local_id:id,numero:p.numero||null,estacion:p.estacion||'',despachado_por:'Facility (simulado)',fecha_despacho:serverTimestamp(),
-    items:(p.items||[]).map(i=>{const c=aj[i.producto_id]!==undefined&&aj[i.producto_id]!==null?aj[i.producto_id]:i.cantidad;return {...i,cantidad_pedida:i.cantidad,cantidad_despachada:c};}).filter(i=>i.cantidad_despachada>0)});
+    items:(p.items||[]).filter(i=>sinAc(i.seccion||secItem(i))!=='proveedores').map(i=>{const c=aj[i.producto_id]!==undefined&&aj[i.producto_id]!==null?aj[i.producto_id]:i.cantidad;return {...i,cantidad_pedida:i.cantidad,cantidad_despachada:c};}).filter(i=>i.cantidad_despachada>0)});
   await setDoc(doc(db,'pedidos_locales',id),{estado:'procesado',despacho_id:ref.id},{merge:true});
   beep(660,.15);vib(40);showToast('📦 Facility despachó el pedido (simulado). Ya aparece en «Por recibir».');
 }
@@ -4283,10 +4284,10 @@ function vPend(){
     '<button class="rx-del" data-rx="pend-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>';
 }
 
-/* ---- Por recibir: listas de proveedores que salen de Pedido (no van a Facility) ---- */
+/* ---- Por recibir: lista de Proveedores del pedido aprobado ---- */
 function vPrec(){
   const l = porRecibir();
-  if(!l.length) return '<div class="rx-vacio">No hay listas por recibir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando envías el pedido.</span></div>';
+  if(!l.length) return '<div class="rx-vacio">No hay listas por recibir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando el encargado aprueba el pedido.</span></div>';
   return '<div class="rx-list">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div><div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px;display:block;text-align:center">Recibir ›</span></button>' +
     '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>';
 }
