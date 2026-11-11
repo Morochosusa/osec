@@ -1459,7 +1459,7 @@ function render(){
 function go(sc){ hideSnack(); S.screen = sc; if(sc !== 'ficha') S.fd = null; closeModal(); render(); renderTop(); }
 function renderGrid(){
   const g = $('#pr-grid'); if(!g) return; const prods = visibles();
-  if(!prods.length){ g.innerHTML = '<button class="card" data-act="padd0" style="grid-column:1/-1;align-items:center;justify-content:center;min-height:calc(var(--u)*260px);border-style:dashed;cursor:pointer"><span style="font-size:96px;line-height:1;color:var(--ac,#3a2a8c)">＋</span><div class="nm" style="text-align:center;font-size:22px">Agregar el primer producto</div><div class="un" style="text-align:center">Toca aquí para crearlo</div></button>'; return; }
+  if(!prods.length){ g.innerHTML = '<button class="card" data-act="padd0"><div class="ph" style="--h:255;font-size:64px;font-weight:600">＋</div><div class="nm">Agregar producto</div><div class="un">Toca para crear el primero</div></button>'; return; }
   let secPrev = '';
   g.innerHTML = prods.map((p, ix) => {
     const f = fichaDe(p.id), hd = (estacionDe(S.op).secciones.length > 1 && p.seccion !== secPrev) ? '<div class="gsec">' + esc(SECCION_NOMBRE[p.seccion] || p.seccion) + '</div>' : ''; secPrev = p.seccion;
@@ -3883,7 +3883,7 @@ function iniciarProd(){
     alRegistrar:r=>stockProd(r,1),alDeshacer:r=>stockProd(r,-1)}});
   // cada local tiene SU lista de productos y SUS fichas; las fichas antiguas sin local siguen siendo de La Victoria
   const LV=LOCAL_CODE['La Victoria'];
-  onSnapshot(query(collection(db,'produccion_catalogo'),where('local','==',code)),snap=>{const d=snap.docs.find(x=>x.data().local===code);PRODREG.setCatalogo(d?d.data().texto:CAT_PROD_TEXTO(),d?d.data().estaciones:null,d?d.data().etiquetas:null);renderInv();},err=>console.error('catalogo',err));
+  onSnapshot(query(collection(db,'produccion_catalogo'),where('local','==',code)),snap=>{const d=snap.docs.find(x=>x.data().local===code);PRODREG.setCatalogo(d?d.data().texto:CAT_PROD_TEXTO(),d?d.data().estaciones:null,d?d.data().etiquetas:null);renderInv();},err=>{console.error('catalogo',err);showToast('🔒 No se pudo leer la lista de productos (permisos). Avisa al administrador');});
   onSnapshot(collection(db,'produccion_fichas'),snap=>{const o={};snap.docs.forEach(d=>{const x=d.data(),dueno=x.local||LV;if(dueno!==code)return;if(x.local||!o[x.id||d.id])o[x.id||d.id]=x;});PRODREG.setFichas(o);renderInv();},err=>console.error('fichas',err));
   onSnapshot(query(collection(db,'produccion_orden'),where('local','==',code)),snap=>{const o={};snap.docs.forEach(d=>{const x=d.data();o[x.op]=x.ids||[];});PRODREG.setOrden(o);},err=>console.error('orden',err));
   suscribirRegistrosProd();
