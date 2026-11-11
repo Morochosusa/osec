@@ -222,6 +222,7 @@
   .nav-tab.active{background:var(--ac);border-color:var(--ac);color:#fff;}
   .chip-net{font-size:14px;font-weight:700;padding:10px 12px;border-radius:14px;white-space:nowrap;flex-shrink:0;}
   .chip-net.on{background:var(--okbg);color:var(--ok);} .chip-net.off{background:var(--erbg);color:var(--er);}
+  .prow.pre{outline:3px solid var(--ac);outline-offset:-3px;}
   .parea-add{min-height:44px;margin:8px 10px;padding:0 14px;border:2px dashed var(--bd);background:transparent;border-radius:12px;font:inherit;font-size:14px;font-weight:700;color:var(--mu);cursor:pointer;flex:0 0 auto;}
   .pd-emo{width:60px;min-height:52px;text-align:center;border-radius:12px;border:2px solid var(--bd);font-size:24px;background:#fff;} .pd-in2{flex:1;min-width:0;min-height:52px;border-radius:12px;border:2px solid var(--bd);padding:0 12px;font:inherit;font-size:18px;background:#fff;}
   #rcx-sim{display:none;max-width:920px;margin:8px auto 4px;padding:12px 14px;border:2px dashed var(--wn);background:var(--wnbg);border-radius:14px;} .sim-t{font-weight:800;color:var(--wn);margin-bottom:8px} .sim-t small{font-weight:600;opacity:.8} .sim-r{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #f0d9a8} .sim-r .bt{min-height:48px;font-size:15px;white-space:nowrap} .sim-v{font-size:14px;color:var(--wn)}
@@ -1103,6 +1104,7 @@
       <div class="pr-head"><div class="pr-title" id="pr-title"></div><div class="pr-sub" id="pr-sub"></div></div>
       <div class="ped-tools"><button class="bt" id="ped-nuevo">➕ Producto nuevo</button><button class="bt ojo" id="ped-ojo" aria-pressed="false" aria-label="Ocultar los productos que no voy a pedir"></button></div>
       <div class="card vacio" id="ped-vacio" style="display:none">No hay productos en esta área todavía.</div>
+      <div id="ped-ls0" style="display:none;gap:10px;margin:10px;flex-wrap:wrap"><button class="bt ac" data-ls0="est" style="flex:1;min-height:52px">➕ Crear estaciones 🔒</button><button class="bt ac" data-ls0="sec" style="flex:1;min-height:52px">➕ Crear categorías 🔒</button></div>
       <div id="ped-grid"></div>
       <button class="bt" id="ped-nombres" style="margin:12px 10px 0;width:calc(100% - 20px);min-height:48px;font-size:15px">✎ Editar nombres de esta lista 🔒</button>
       <button class="bt" id="ped-elim" style="display:none;margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px"></button>
@@ -1215,10 +1217,14 @@
   <div class="kp-title" style="text-align:left">➕ Producto nuevo</div>
   <div class="field"><label>Nombre</label><input class="form-control" id="np-nom" placeholder="Ej. Harina integral" autocomplete="off"></div>
   <div class="np-r"><div class="field"><label>Área</label><select class="form-control" id="np-area"></select></div>
-  <div class="field"><label>Sección</label><select class="form-control" id="np-sec"><option>Mercado</option><option>Facility</option><option>Bodega</option><option>Proveedores</option><option>Grande</option></select></div></div>
+  <div class="field"><label>Sección</label><select class="form-control" id="np-sec"></select></div></div>
   <div class="np-r"><div class="field"><label>Cantidad habitual</label><input type="text" class="form-control" id="np-cant" value="1" inputmode="decimal" autocomplete="off"></div>
   <div class="field"><label>Presentación (ej. × 1 lb, cajas)</label><input class="form-control" id="np-res" placeholder="× 1 lb"></div></div>
   <div class="np-b"><button class="bt" id="np-cancel">Cancelar</button><button class="bt ok" id="np-ok">Crear producto</button></div>
+</div></div>
+<div class="qm-overlay" id="ls" style="z-index:460;align-items:stretch"><div class="cfg-box">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><div class="kp-title" style="margin:0;text-align:left;font-size:22px" id="ls-t">⚙ Listas</div><button class="bt" id="ls-x">Listo ✓</button></div>
+  <div id="ls-body"></div>
 </div></div>
 <div class="qm-overlay" id="cfg" style="z-index:450;align-items:stretch"><div class="cfg-box">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><div class="kp-title" style="margin:0;text-align:left;font-size:22px">⚙ Productos (manager)</div><button class="bt" id="cfg-cerrar">Cerrar ✕</button></div>
@@ -2867,7 +2873,7 @@ function iniciarCatalogo(){   // la lista base está en CATALOGO_TEXTO; aquí ll
     aplicarOvr();renderPedido();renderInv();renderCfg();
   },err=>console.error('ajustes',err));
   onSnapshot(doc(db,'pedido_orden','_global'),d=>{
-    const x=d&&typeof d.exists==='function'&&d.exists()?d.data():{};AREAS_CFG={nombres:x.nombres||{},extras:x.extras||[]};
+    const x=d&&typeof d.exists==='function'&&d.exists()?d.data():{};AREAS_CFG={nombres:x.nombres||{},extras:x.extras||[],ocultas:x.ocultas||[],secs:x.secs||[],secsOcultas:x.secsOcultas||[]};
     aplicarOrdenListas(ULT_ORDEN);renderPedido();renderInv();pintarInvTabs();try{window.rxRefresh&&window.rxRefresh();}catch(e){}
   },err=>console.error('estaciones',err));
   onSnapshot(doc(db,'pedido_orden',LOCAL_CODE[dispositivo.local]),d=>{aplicarOrdenListas(d&&typeof d.exists==='function'&&d.exists()?d.data():null);renderPedido();renderInv();renderCfg();},err=>console.error('pedido_orden',err));
@@ -2921,12 +2927,14 @@ async function cfgGuardarNombre(id){
 // ── Crear / eliminar productos de la lista de Pedido (se guardan en productos_ajustes; eliminar = ocultar, se puede restaurar)
 function prodNuevoAbrir(area){
   $('np-area').innerHTML=AREAS.map(([c,l])=>`<option value="${esc(c)}" ${c===area?'selected':''}>${esc(l)}</option>`).join('');
-  $('np-nom').value='';$('np-cant').value='1';$('np-res').value='';$('np-sec').value=area==='cocina'?'Mercado':'Bodega';
+  $('np-nom').value='';$('np-cant').value='1';$('np-res').value='';const sl=secList();$('np-sec').innerHTML=sl.map(x=>`<option>${esc(x)}</option>`).join('');$('np-sec').value=area==='cocina'&&sl.indexOf('Mercado')>=0?'Mercado':(sl.indexOf('Bodega')>=0?'Bodega':(sl[0]||''));
   $('np').classList.add('open');setTimeout(()=>$('np-nom').focus(),120);
 }
 async function prodNuevoGuardar(){
   const nombre=$('np-nom').value.trim(),cant=parseFloat(String($('np-cant').value).replace(',','.')),resto=$('np-res').value.trim(),categoria=$('np-area').value,seccion=$('np-sec').value;
   if(!nombre){showToast('⚠️ Escribe el nombre del producto');return;}
+  if(!categoria){showToast('⚠️ Primero crea una estación');return;}
+  if(!seccion){showToast('⚠️ Primero crea una categoría');return;}
   if(CAT.some(p=>enArea(p,categoria)&&sinAc(p.nombre)===sinAc(nombre)&&sinAc(p.seccion)===sinAc(seccion))){showToast('⚠️ Ese producto ya existe en la lista');return;}
   const id='x_'+slugId(categoria)+'_'+slugId(nombre)+'_'+Date.now().toString(36);
   const dato={custom:true,local:LOCAL_CODE[dispositivo.local],nombre,cant:cant>0?cant:1,resto,categoria,seccion,creado_por:(dispositivo&&dispositivo.local)||'',fecha_creacion:serverTimestamp()};
@@ -2940,13 +2948,14 @@ document.addEventListener('touchmove',e=>{if(dragActivo&&e.cancelable)e.preventD
 $('ped-grid')&&$('ped-grid').addEventListener('contextmenu',e=>e.preventDefault());
 $('ped-cats')&&$('ped-cats').addEventListener('contextmenu',e=>e.preventDefault());
 // Estaciones: las 4 de origen + las que se agreguen; los nombres se pueden cambiar (se guardan en pedido_orden/_global)
-let AREAS_CFG={nombres:{},extras:[]},ULT_ORDEN=null;
-const areasBase=()=>AREAS_BASE.map(([k,l])=>[k,(AREAS_CFG.nombres&&AREAS_CFG.nombres[k])||l]).concat((AREAS_CFG.extras||[]).filter(e=>e&&e[0]).map(e=>[e[0],e[1]]));
+let AREAS_CFG={nombres:{},extras:[],ocultas:[],secs:[],secsOcultas:[]},ULT_ORDEN=null;
+const secList=()=>SEC_BASE.filter(n=>(AREAS_CFG.secsOcultas||[]).indexOf(n)<0).concat((AREAS_CFG.secs||[]).filter(n=>n&&SEC_BASE.indexOf(n)<0));
+const areasBase=()=>AREAS_BASE.filter(([k])=>(AREAS_CFG.ocultas||[]).indexOf(k)<0).map(([k,l])=>[k,(AREAS_CFG.nombres&&AREAS_CFG.nombres[k])||l]).concat((AREAS_CFG.extras||[]).filter(e=>e&&e[0]).map(e=>[e[0],e[1]]));
 function aplicarOrdenListas(o){
   ULT_ORDEN=o;
   const ra=(o&&o.areas)||[],rs=(o&&o.secciones)||[];
   AREAS=areasBase().map((a,i)=>({a,i})).sort((x,y)=>{const ix=ra.indexOf(x.a[0]),iy=ra.indexOf(y.a[0]);return ((ix<0?99:ix)-(iy<0?99:iy))||(x.i-y.i);}).map(x=>x.a);
-  SEC_ORDEN=rs.length?rs.concat(SEC_BASE.filter(n=>rs.indexOf(n)<0)):SEC_BASE.slice();
+  {const sl=secList();SEC_ORDEN=rs.length?rs.filter(n=>sl.indexOf(n)>=0).concat(sl.filter(n=>rs.indexOf(n)<0)):sl.slice();}
 }
 function guardarOrdenListas(){
   if(!dispositivo)return;
@@ -3079,15 +3088,17 @@ function renderPedido(){
   $('ped-cats').innerHTML=AREAS.map(([c,l])=>{const em=l.split(' ')[0],nom=l.slice(em.length+1);
     const tot=CAT.filter(p=>enArea(p,c)).length,sel=CAT.filter(p=>enArea(p,c)&&pedItems[p.id]!==undefined).length;
     const bt=`<button class="parea ${c===pedCat&&!sinAc(pedQ)?'act':''}" data-c="${esc(c)}"><span class="pa-ic">${em}</span><span class="pa-tx"><b>${esc(nom)}</b><small>${tot?(sel?sel+' por pedir':'Nada por pedir')+' · '+tot+' productos':'Sin productos'}</small></span></button>`;
-    return bt;}).join('')+'<button class="parea-add" id="ped-est">✎ Editar estaciones 🔒</button>';
+    return bt;}).join('');
   const q=sinAc(pedQ);
   const listaTodos=q?CAT.filter(p=>sinAc(p.nombre).includes(q)):CAT.filter(p=>enArea(p,pedCat));
   const lista=pedOcultar?listaTodos.filter(p=>pedItems[p.id]!==undefined):listaTodos;   // si buscas, busca en todas las áreas
-  const aInfo=AREAS.find(a=>a[0]===pedCat)||AREAS[0];const nSel=listaTodos.filter(p=>pedItems[p.id]!==undefined).length;
+  if(AREAS.length&&!AREAS.some(a=>a[0]===pedCat))pedCat=AREAS[0][0];
+  const aInfo=AREAS.find(a=>a[0]===pedCat)||AREAS[0]||['','📋 Lista de pedido'];const nSel=listaTodos.filter(p=>pedItems[p.id]!==undefined).length;
   $('pr-title').textContent=q?'🔍 Resultados':aInfo[1].toUpperCase();
   $('pr-sub').textContent=nSel?`${nSel} por pedir`:'Nada por pedir';
   $('ped-vacio').style.display=lista.length?'none':'block';
-  $('ped-vacio').textContent=(pedOcultar&&listaTodos.length)?'Nada por pedir en esta lista. Toca el ojo para ver todos los productos.':'No hay productos en esta área todavía.';
+  $('ped-vacio').textContent=!AREAS.length?'Esta lista está vacía. Empieza creando una estación (ej. Cocina) y una categoría (ej. Mercado); luego agrega tus productos con ➕ Producto nuevo.':(pedOcultar&&listaTodos.length)?'Nada por pedir en esta lista. Toca el ojo para ver todos los productos.':'No hay productos en esta área todavía.';
+  const l0=$('ped-ls0');if(l0)l0.style.display=(!AREAS.length||!secList().length)?'flex':'none';
   const secs=[...new Set(lista.map(p=>p.seccion||''))].sort((a,b)=>{const x=SEC_ORDEN.indexOf(a),y=SEC_ORDEN.indexOf(b);return (x<0?99:x)-(y<0?99:y);});
   $('ped-grid').innerHTML=secs.map(sc=>`<div class="secblk" data-sec="${esc(sc)}">${sc?`<div class="sec-h">🗂 ${esc(sc)}</div>`:''}<div class="plist">`+lista.filter(p=>(p.seccion||'')===sc).map(p=>{
     const c=pedItems[p.id],sel=c!==undefined;
@@ -3102,6 +3113,14 @@ function renderPedido(){
   $('ped-count').textContent=`${n} producto${n===1?'':'s'}`;
   $('ped-send').disabled=!n;
   renderMisPedidos();
+}
+// Doble toque para marcar / desmarcar (evita marcar por accidente mientras se arma la lista)
+let _tapId=null,_tapT=0;
+function pedDoble(row){
+  const id=row.dataset.id,t=Date.now();
+  if(_tapId===id&&t-_tapT<450){_tapId=null;row.classList.remove('pre');pedTap(id);return;}
+  _tapId=id;_tapT=t;row.classList.add('pre');
+  setTimeout(()=>{if(_tapId===id&&Date.now()-_tapT>=440){row.classList.remove('pre');_tapId=null;}},460);
 }
 function pedTap(id){   // un toque marca / desmarca el producto con su cantidad habitual
   const p=CAT.find(x=>x.id===id);if(!p)return;vib();
@@ -3141,10 +3160,11 @@ function pdPintar(){
     <button class="pd-quitar" data-r="del">Quitar del pedido</button>
     <button class="pd-quitar" data-r="elim" style="margin-top:10px;background:transparent;border:2px solid var(--er)">🗑 Eliminar producto de la lista 🔒</button>`;
   }else if(pdVista==='cat'){
-    const act=p.seccion||'',base=PD_CATS.indexOf(act)<0&&act?PD_CATS.concat([act]):PD_CATS,q=sinAc(pdQ);
+    const act=p.seccion||'',sl=secList(),base=sl.indexOf(act)<0&&act?sl.concat([act]):sl,q=sinAc(pdQ);
     const lis=base.filter(c=>!q||sinAc(c).includes(q));
     b.innerHTML=`<input type="search" class="pd-bus" id="pd-bus" placeholder="🔍 Buscar categorías" value="${esc(pdQ)}" autocomplete="off">
-    <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>`;
+    <div class="pd-grp pd-lista">${lis.map(c=>`<div class="pd-row" data-c="${esc(c)}"><span class="pd-ic">📚</span><span class="pd-k">${esc(c)}</span>${c===act?'<span class="pd-ok">✓</span>':''}</div>`).join('')||'<div class="pd-row" style="color:var(--mu)">Sin resultados</div>'}</div>
+    <button class="bt" data-ls="sec" style="margin:14px 8px 0;width:calc(100% - 16px);min-height:52px">⚙ Crear o administrar categorías</button>`;
     const bus=$('pd-bus');if(bus&&pdQ){bus.focus();bus.setSelectionRange(pdQ.length,pdQ.length);}
   }else if(pdVista==='nom'){
     b.innerHTML=`<div class="pd-sec">Nombre</div><input class="pd-in" id="pd-nom" value="${esc(p.nombre||'')}" maxlength="60" autocomplete="off"><div class="pd-hint">El cambio se ve en la lista de pedido, en Inventario y en Recepción. Los pedidos ya enviados conservan el nombre con el que salieron.</div>`;
@@ -3160,7 +3180,8 @@ function pdPintar(){
     const el=CAT_TODOS.filter(x=>x.oculto&&enArea(x,pedCat));
     b.innerHTML=el.length?`<div class="pd-grp pd-lista">${el.map(x=>`<div class="pd-row" data-rest="${esc(x.id)}"><span class="pd-k">${esc(x.nombre)} <small style="color:var(--mu)">${esc(x.seccion||'')}</small></span><span class="pd-v" style="color:var(--ac);font-weight:700">↩ Restaurar</span></div>`).join('')}</div>`:'<div class="pd-hint" style="text-align:center;margin-top:30px">No hay productos eliminados en esta lista.</div>';
   }else if(pdVista==='area'){
-    b.innerHTML=`<div class="pd-grp pd-lista">${AREAS.map(([c,l])=>`<div class="pd-row" data-a="${esc(c)}"><span class="pd-ic">${esc(l.split(' ')[0])}</span><span class="pd-k">${esc(l.slice(l.indexOf(' ')+1))}</span>${sinAc(c)===sinAc(p.categoria)?'<span class="pd-ok">✓</span>':''}</div>`).join('')}</div>`;
+    b.innerHTML=`<div class="pd-grp pd-lista">${AREAS.map(([c,l])=>`<div class="pd-row" data-a="${esc(c)}"><span class="pd-ic">${esc(l.split(' ')[0])}</span><span class="pd-k">${esc(l.slice(l.indexOf(' ')+1))}</span>${sinAc(c)===sinAc(p.categoria)?'<span class="pd-ok">✓</span>':''}</div>`).join('')}</div>
+    <button class="bt" data-ls="est" style="margin:14px 8px 0;width:calc(100% - 16px);min-height:52px">⚙ Crear o administrar estaciones</button>`;
   }else{
     b.innerHTML=`<div class="pd-sec">Tamaño de paquete</div><input class="pd-in" id="pd-pack" value="${esc(p.resto||'')}" placeholder="Ej. × 1 lb, × 1 kg, caja" autocomplete="off"><div class="pd-hint">Cómo viene el producto. Ej.: × 1 lb, × 1 arroba, cajas.</div>`;
     setTimeout(()=>{const i=$('pd-pack');if(i)i.focus();},80);
@@ -3183,10 +3204,95 @@ async function estGuardar(){
   const nn=($('est-nnm')||{}).value;
   if(nn&&nn.trim()){let k=sinAc(nn).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim()||'estacion';
     if(areasBase().some(a=>sinAc(a[0])===k))k+=' 2';extras.push([k,(($('est-nem')||{}).value||'📍').trim()+' '+nn.trim()]);}
-  AREAS_CFG={nombres:Object.assign({},AREAS_CFG.nombres,nombres),extras};
+  AREAS_CFG=Object.assign({},AREAS_CFG,{nombres:Object.assign({},AREAS_CFG.nombres,nombres),extras});
   aplicarOrdenListas(ULT_ORDEN);renderPedido();renderInv();pintarInvTabs();try{window.rxRefresh&&window.rxRefresh();}catch(e){}
   try{await setDoc(doc(db,'pedido_orden','_global'),{nombres:AREAS_CFG.nombres,extras,actualizado:serverTimestamp()},{merge:true});showToast('✅ Estaciones guardadas');}
   catch(e){console.error(e);showToast('❌ No se pudo guardar');}
+}
+
+/* ── Editor de listas: crear / renombrar / eliminar estaciones y categorías (manager) ── */
+let lsModo='est',lsSeg=null;
+const lsGuardarCfg=async(msg)=>{
+  aplicarOrdenListas(ULT_ORDEN);renderPedido();renderInv();pintarInvTabs();try{window.rxRefresh&&window.rxRefresh();}catch(e){}
+  try{await setDoc(doc(db,'pedido_orden','_global'),{nombres:AREAS_CFG.nombres||{},extras:AREAS_CFG.extras||[],ocultas:AREAS_CFG.ocultas||[],secs:AREAS_CFG.secs||[],secsOcultas:AREAS_CFG.secsOcultas||[],actualizado:serverTimestamp()},{merge:true});if(msg)showToast('✅ '+msg);}
+  catch(e){console.error(e);showToast('❌ No se pudo guardar');}
+};
+const lsUsoArea=k=>CAT.filter(p=>sinAc(p.categoria)===sinAc(k)).length;
+const lsUsoSec=n=>CAT.filter(p=>sinAc(p.seccion)===sinAc(n)).length;
+function lsAbrir(m){lsModo=m;lsSeg=null;lsPintar();$('ls').classList.add('open');}
+function lsPintar(){
+  const b=$('ls-body');
+  if(lsModo==='est'){
+    $('ls-t').textContent='⚙ Estaciones';
+    b.innerHTML=`<div class="pd-hint" style="margin:0 4px 12px">Cambia el nombre o el ícono, crea una nueva o elimina las que ya no uses. Solo se puede eliminar una estación sin productos (mueve o elimina sus productos antes).</div>
+    ${AREAS.map(([k,l])=>{const em=l.split(' ')[0],nm=l.slice(em.length+1),n=lsUsoArea(k);return `<div class="cfg-row" style="padding:8px"><input class="pd-emo" data-ek="${esc(k)}" value="${esc(em)}" maxlength="4" aria-label="Ícono"><input class="pd-in2" data-en="${esc(k)}" value="${esc(nm)}" maxlength="30" aria-label="Nombre"><small style="color:var(--mu);white-space:nowrap">${n} prod.</small><button class="bt" data-del="${esc(k)}" style="min-height:48px">${lsSeg===k?'¿Seguro?':'🗑'}</button></div>`;}).join('')||'<div class="pd-hint" style="text-align:center">Todavía no hay estaciones. Crea la primera abajo.</div>'}
+    <div class="kp-title" style="font-size:16px;text-align:left;margin:16px 0 8px">➕ Nueva estación</div>
+    <div class="cfg-row" style="padding:8px"><input class="pd-emo" id="ls-nem" value="📍" maxlength="4"><input class="pd-in2" id="ls-nnm" placeholder="Ej. Bodega fría" maxlength="30"><button class="bt ac" id="ls-add" style="min-height:48px">Crear</button></div>`;
+  }else{
+    $('ls-t').textContent='⚙ Categorías';
+    const sl=secList();
+    b.innerHTML=`<div class="pd-hint" style="margin:0 4px 12px">Son las secciones dentro de cada estación (ej. Mercado, Bodega). Crea nuevas, cambia el nombre de las que creaste tú o elimina las vacías. Para renombrar una categoría de fábrica, crea una nueva y mueve los productos.</div>
+    ${sl.map(n=>{const base=SEC_BASE.indexOf(n)>=0,u=lsUsoSec(n);return `<div class="cfg-row" style="padding:8px"><input class="pd-in2" data-sn="${esc(n)}" value="${esc(n)}" maxlength="30" ${base?'readonly style="opacity:.6"':''} aria-label="Nombre"><small style="color:var(--mu);white-space:nowrap">${u} prod.</small><button class="bt" data-sdel="${esc(n)}" style="min-height:48px">${lsSeg===n?'¿Seguro?':'🗑'}</button></div>`;}).join('')||'<div class="pd-hint" style="text-align:center">Todavía no hay categorías. Crea la primera abajo.</div>'}
+    <div class="kp-title" style="font-size:16px;text-align:left;margin:16px 0 8px">➕ Nueva categoría</div>
+    <div class="cfg-row" style="padding:8px"><input class="pd-in2" id="ls-nsc" placeholder="Ej. Lácteos" maxlength="30"><button class="bt ac" id="ls-sadd" style="min-height:48px">Crear</button></div>`;
+  }
+}
+async function lsRenSec(viejo,nuevo){
+  // cambia el nombre de una categoría creada por la manager: se reescribe en sus productos
+  const ex=(AREAS_CFG.secs||[]).slice(),i=ex.indexOf(viejo);if(i<0)return;
+  if(secList().some(x=>sinAc(x)===sinAc(nuevo))){showToast('⚠️ Ya existe una categoría con ese nombre');return;}
+  ex[i]=nuevo;AREAS_CFG.secs=ex;
+  const ps=CAT_TODOS.filter(p=>sinAc(p.seccion)===sinAc(viejo));
+  ps.forEach(p=>{OVR[p.id]={...(OVR[p.id]||{}),seccion:nuevo};});aplicarOvr();
+  await lsGuardarCfg();
+  for(const p of ps){try{await setDoc(doc(db,'productos_ajustes',p.id),{seccion:nuevo},{merge:true});}catch(e){console.error(e);}}
+  showToast('✅ Categoría renombrada');
+}
+function lsIniciar(){
+  $('ped-ls0').addEventListener('click',e=>{const b=e.target.closest('[data-ls0]');if(b)mgrCodigo(()=>lsAbrir(b.dataset.ls0));});
+  $('ls-x').addEventListener('click',()=>{
+    // guarda renombres pendientes
+    if(lsModo==='est'){
+      let cambio=false;const nombres={},extras=(AREAS_CFG.extras||[]).map(e=>[e[0],e[1]]),baseK=AREAS_BASE.map(a=>a[0]);
+      document.querySelectorAll('#ls-body [data-en]').forEach(inp=>{const k=inp.dataset.en,em=(document.querySelector(`#ls-body [data-ek="${k}"]`).value||'📍').trim(),nm=inp.value.trim();if(!nm)return;
+        const l=em+' '+nm;if(baseK.indexOf(k)>=0){if((AREAS.find(a=>a[0]===k)||[])[1]!==l){nombres[k]=l;cambio=true;}}else{const x=extras.find(e=>e[0]===k);if(x&&x[1]!==l){x[1]=l;cambio=true;}}});
+      if(cambio){AREAS_CFG=Object.assign({},AREAS_CFG,{nombres:Object.assign({},AREAS_CFG.nombres,nombres),extras});lsGuardarCfg('Estaciones guardadas');}
+    }else{
+      document.querySelectorAll('#ls-body [data-sn]:not([readonly])').forEach(inp=>{const v=inp.value.trim(),o=inp.dataset.sn;if(v&&v!==o)lsRenSec(o,v);});
+    }
+    $('ls').classList.remove('open');if(pdId){pdPintar();}
+  });
+  $('ls-body').addEventListener('click',async e=>{
+    const d=e.target.closest('[data-del]');
+    if(d){const k=d.dataset.del;
+      if(lsUsoArea(k)>0){showToast('⚠️ Esa estación tiene '+lsUsoArea(k)+' productos. Muévelos o elimínalos primero');lsSeg=null;return;}
+      if(lsSeg!==k){lsSeg=k;lsPintar();setTimeout(()=>{if(lsSeg===k){lsSeg=null;if($('ls').classList.contains('open')&&lsModo==='est')lsPintar();}},3500);return;}
+      lsSeg=null;
+      if(AREAS_BASE.some(a=>a[0]===k))AREAS_CFG.ocultas=(AREAS_CFG.ocultas||[]).concat([k]);
+      else AREAS_CFG.extras=(AREAS_CFG.extras||[]).filter(x=>x[0]!==k);
+      if(pedCat===k)pedCat=(AREAS[0]||[])[0]||'';
+      await lsGuardarCfg('Estación eliminada');if(AREAS.every(a=>a[0]!==pedCat))pedCat=(AREAS[0]||[])[0]||'';lsPintar();renderPedido();return;}
+    const sd=e.target.closest('[data-sdel]');
+    if(sd){const n=sd.dataset.sdel;
+      if(lsUsoSec(n)>0){showToast('⚠️ Esa categoría tiene '+lsUsoSec(n)+' productos. Cámbialos de categoría primero');lsSeg=null;return;}
+      if(lsSeg!==n){lsSeg=n;lsPintar();setTimeout(()=>{if(lsSeg===n){lsSeg=null;if($('ls').classList.contains('open')&&lsModo==='sec')lsPintar();}},3500);return;}
+      lsSeg=null;
+      if(SEC_BASE.indexOf(n)>=0)AREAS_CFG.secsOcultas=(AREAS_CFG.secsOcultas||[]).concat([n]);
+      else AREAS_CFG.secs=(AREAS_CFG.secs||[]).filter(x=>x!==n);
+      await lsGuardarCfg('Categoría eliminada');lsPintar();return;}
+    if(e.target.closest('#ls-add')){
+      const nn=($('ls-nnm').value||'').trim();if(!nn){showToast('⚠️ Escribe el nombre de la estación');return;}
+      let k=sinAc(nn).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim()||'estacion';
+      const todas=AREAS_BASE.map(a=>a[0]).concat((AREAS_CFG.extras||[]).map(x=>x[0]));while(todas.some(x=>sinAc(x)===k))k+=' 2';
+      AREAS_CFG.extras=(AREAS_CFG.extras||[]).concat([[k,(($('ls-nem').value||'📍').trim())+' '+nn]]);
+      await lsGuardarCfg('Estación creada');if(!pedCat)pedCat=k;lsPintar();return;}
+    if(e.target.closest('#ls-sadd')){
+      const nn=($('ls-nsc').value||'').trim();if(!nn){showToast('⚠️ Escribe el nombre de la categoría');return;}
+      if(secList().some(x=>sinAc(x)===sinAc(nn))){showToast('⚠️ Ya existe esa categoría');return;}
+      AREAS_CFG.secs=(AREAS_CFG.secs||[]).concat([nn]);
+      AREAS_CFG.secsOcultas=(AREAS_CFG.secsOcultas||[]).filter(x=>sinAc(x)!==sinAc(nn));
+      await lsGuardarCfg('Categoría creada');lsPintar();return;}
+  });
 }
 function pdIniciar(){
   $('pd-done').addEventListener('click',()=>{
@@ -3204,6 +3310,7 @@ function pdIniciar(){
   $('pd-body').addEventListener('click',e=>{
     const st=e.target.closest('[data-s]');
     if(st){vib(10);pedItems[pdId]=Math.max(0,r2((pedItems[pdId]||0)+parseFloat(st.dataset.s)));$('pd-qv').textContent=fmtN(pedItems[pdId]);return;}
+    const lsb=e.target.closest('[data-ls]');if(lsb){lsAbrir(lsb.dataset.ls);return;}
     const c=e.target.closest('[data-c]');
     if(c){if(c.dataset.c!==(pdP().seccion||''))pdGuardar({seccion:c.dataset.c});pdVista='main';pdQ='';pdPintar();return;}
     const rs=e.target.closest('[data-rest]');
@@ -3559,9 +3666,8 @@ function iniciarUI(){
   $('inv-cats').addEventListener('click',e=>{const b=e.target.closest('.qchip');if(b){invCat=b.dataset.c;vib();invCargar();}});
   $('inv-search').addEventListener('input',e=>{invQ=e.target.value;renderInv();});
   $('inv-save').addEventListener('click',invGuardar);
-  $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedTap(b.dataset.id);});
-  initArrastre();pdIniciar();
-  $('ped-cats').addEventListener('click',e=>{if(e.target.closest('#ped-est'))mgrCodigo(()=>{pdId=null;pdVista='est';pdPintar();$('pd').classList.add('open');});});
+  $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedDoble(b);});
+  initArrastre();pdIniciar();lsIniciar();
   $('ped-nombres').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='noms';pdPintar();$('pd').classList.add('open');}));
   $('ped-elim').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='elim';pdPintar();$('pd').classList.add('open');}));
   $('ped-cats').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const b=e.target.closest('.parea');if(b){pedCat=b.dataset.c;pedQ='';$('ped-search').value='';vib();renderPedido();}});
