@@ -1592,7 +1592,7 @@ function deshacer(id){
   try { alDeshacer(r); } catch(e){ console.error(e); }
 }
 function flash(kind, text){ const f = $('#pr-flash'); if(!f) return; f.className = 'pr-flash ' + kind + ' show'; f.innerHTML = '<div>' + ic(kind === 'ok' ? 'check' : 'x', 150) + '</div><div class="ft">' + text + '</div>'; clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 800); }
-function toast(msg){ if(!/^🔒|no se pudo|no salió|incorrecto|elige|pon |primero|ya no se puede|sin etiqueta|impresión|escribe|ya existe|no se puede|debe quedar|productos\. elim/i.test(String(msg||''))) return; const t = $('#pr-toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+function toast(msg){ if(!/^🔒|no se pudo|no salió|incorrecto|elige|pon |primero|ya no se puede|sin etiqueta|impresión|escribe|ya existe|no se puede|debe quedar|productos\. elim|lista vaciada/i.test(String(msg||''))) return; const t = $('#pr-toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
 function showSnack(r){
   const s = $('#pr-snack'); if(!s) return;
   s.innerHTML = '<div class="snackbox"><div class="st">' + fmt(r.cant) + ' ' + esc(r.unidad) + ' · ' + esc(r.nombre) + '</div><button class="btn" data-act="undo" data-id="' + r.id + '">Deshacer</button><div class="snackbar"></div></div>';
@@ -1767,7 +1767,8 @@ function renderFichasList(){
     '<div class="sec"><div class="mu">' + esc(S.op) + ': cada producto necesita su vida útil para calcular el vencimiento y sacar la etiqueta. Faltan ' + falta + ' de ' + prods.length + '. Para ver los de otra estación, cámbiala en la pantalla de registro.</div>' +
     '<button class="btn ' + (S.filtroFalta ? 'on' : '') + '" data-act="ffalta">' + (S.filtroFalta ? 'Mostrando solo los que faltan' : 'Mostrar solo los que faltan') + '</button>' +
     '<button class="btn pri" data-act="padd" style="margin-top:8px">➕ Agregar producto a ' + esc(S.op) + '</button>' +
-    '<div class="row" style="margin-top:8px"><button class="btn" data-act="eadd" style="flex:1">➕ Nueva estación</button><button class="btn" data-act="edel" style="flex:1;color:#b3261e;border-color:#b3261e">🗑 Eliminar «' + esc(S.op) + '»</button></div></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn" data-act="eadd" style="flex:1">➕ Nueva estación</button><button class="btn" data-act="edel" style="flex:1;color:#b3261e;border-color:#b3261e">🗑 Eliminar «' + esc(S.op) + '»</button></div>' +
+    '<button class="btn" data-act="pvaciar" style="margin-top:8px;color:#b3261e;border-color:#b3261e">🗑 Vaciar todos los productos de este local</button></div>' +
     '<div id="pr-grid" style="padding:0">' + lista.map(p => {
       const f = fichaDe(p.id), num = prods.indexOf(p) + 1, ms = modosDe(f).map(m => MODOS[m].slice(0, 3) + ' ' + f.vida[m] + 'd').join(' · ') || 'Falta vida útil';
       return '<button class="card' + (tieneVida(f) ? '' : ' falta') + '" data-act="ficha" data-pid="' + p.id + '">' + phHTML(f) + '<div class="nm"><span class="pnum">' + num + '.</span> ' + esc(f.nombre) + '</div><div class="un">' + esc(ms) + '</div></button>';
@@ -1981,6 +1982,8 @@ function onClick(e){
     case 'ficha': { const f = fichaDe(d.pid); S.fd = {id:f.id, draft:JSON.parse(JSON.stringify(f))}; S.screen = 'ficha'; closeModal(); render(); renderTop(); break; }
     case 'ffalta': S.filtroFalta = !S.filtroFalta; render(); break;
     case 'padd': modalAgregar(); break;
+    case 'pvaciar': openModal('<div class="mt">¿Vaciar TODOS los productos?</div><div class="mu small" style="text-align:center">Se quitan los ' + PROD_ALL.length + ' productos de la lista de este local (todas las estaciones). Lo ya registrado no se borra. Después los agregas uno por uno.</div><div class="row"><button class="btn" data-act="mclose" style="flex:1">No</button><button class="btn okb" data-act="pvaciar-ok" style="flex:1;background:#b3261e">Sí, vaciar</button></div>'); break;
+    case 'pvaciar-ok': catGuardar(catLineas().filter(l => l.indexOf('## ') === 0)); S.pid = null; closeModal(); render(); renderTop(); toast('Lista vaciada'); break;
     case 'eadd': modalEstacion(); break;
     case 'eadd-ok': estacionOk(); break;
     case 'edel': estacionEliminar(); break;
@@ -3828,6 +3831,7 @@ function iniciarAreas(){
 
 // ── PRODUCCIÓN (registro con etiquetas; lo registrado entra al inventario del área) ──
 const CAT_PROD_TEXTO=()=>{
+  if(dispositivo&&dispositivo.local!=='La Victoria')return '';   // los demás locales empiezan SIN productos: se agregan uno por uno
   const pan=PRODUCTOS_PROD.map(n=>{const m=n.match(/^(.*?)\s*\((\d+)u\)\s*$/);return `${m?m[1]:n} | ${m?m[2]:10} | unidades | `;}).join('\n');
   const coc=LISTA_COCINA.map(n=>`${n} | 10 | unidades | `).join('\n');
   return `## Panadería producción\n${pan}\n## Cocina\n${coc}\n`;
