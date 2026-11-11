@@ -1315,7 +1315,7 @@ const STORE = {
   actualizarRegistro(r){ if(r.prueba) return; if(API.actualizarRegistro) API.actualizarRegistro(r); },
   guardarFicha(f){ if(API.guardarFicha) API.guardarFicha(f); },
   guardarOrden(op, ids){ if(API.guardarOrden) API.guardarOrden(op, ids); },
-  guardarCatalogo(t){ if(API.guardarCatalogo) API.guardarCatalogo(t, OPERADORES.slice()); }
+  guardarCatalogo(t){ if(API.guardarCatalogo) API.guardarCatalogo(t, OPERADORES.slice(), ETIQ); }
 };
 function alRegistrar(r){ if(!r.prueba&&API.alRegistrar) API.alRegistrar(r); }
 function alDeshacer(r){ if(!r.prueba&&API.alDeshacer) API.alDeshacer(r); }
@@ -1381,6 +1381,8 @@ function leerCatalogo(){
 const estacionDe = nombre => ESTACIONES.filter(e => e.nombre === nombre)[0] || ESTACIONES[0];
 let OPERADORES = ESTACIONES.map(e => e.nombre);
 const EST_BASE = OPERADORES.slice();
+let ETIQ = {};
+const lbl = o => ETIQ[o] || o;
 function setEstaciones(arr){ if(!arr || !arr.length) return; ESTACIONES = arr.map(n => ({nombre:n, secciones:[n]})); OPERADORES = arr.slice(); }
 const opInicial = v => OPERADORES.indexOf(v) >= 0 ? v : OPERADORES[0];
 const codigoDe = p => (sinAc(p.nombre).replace(/[^A-Za-z]/g, '').slice(0, 3) || 'PRD').toUpperCase();
@@ -1437,7 +1439,7 @@ function renderTop(){
   const t = $('#pr-top'); if(!t) return;
   const imp = S.imp === 'usb' ? (U.estado === 'listo' ? {cls:'ok', txt:'Cable conectado'} : {cls:'wn', txt:'Cable sin conectar'}) : S.imp === 'nav' ? {cls:'ok', txt:'Imprime etiquetas'} : {cls:'wn', txt:'Sin imprimir'};
   const printer = imp.act ? '<button class="stat ' + imp.cls + '" data-act="' + imp.act + '">' + ic('printer', 22) + ' ' + imp.txt + '</button>' : '<button class="stat ' + imp.cls + '" data-act="usb-menu">' + ic('printer', 22) + ' ' + imp.txt + '</button>';
-  t.innerHTML = '<div class="ops">' + OPERADORES.map(o => BLOQUEADAS.indexOf(o) >= 0 ? '<button class="btn bloq" data-act="bloq" data-v="' + esc(o) + '">🔒 ' + esc(o) + '</button>' : '<button class="btn ' + (S.op === o ? 'on' : '') + '" data-act="op" data-v="' + esc(o) + '">' + esc(o) + '</button>').join('') + '</div>' +
+  t.innerHTML = '<div class="ops">' + OPERADORES.map(o => BLOQUEADAS.indexOf(o) >= 0 ? '<button class="btn bloq" data-act="bloq" data-v="' + esc(o) + '">🔒 ' + esc(lbl(o)) + '</button>' : '<button class="btn ' + (S.op === o ? 'on' : '') + '" data-act="op" data-v="' + esc(o) + '">' + esc(lbl(o)) + '</button>').join('') + '</div>' +
     (S.prueba ? '<button class="stat wn" data-act="menu">🧪 MODO PRUEBA</button>' : '') + '<button class="btn" data-act="go" data-v="hoy">Hoy (' + regsHoy().length + ')</button>' + printer + '<button class="btn" data-act="menu" aria-label="Opciones">' + ic('gear', 26) + '</button>';
   layout();
 }
@@ -1453,7 +1455,7 @@ function render(){
 function go(sc){ hideSnack(); S.screen = sc; if(sc !== 'ficha') S.fd = null; closeModal(); render(); renderTop(); }
 function renderGrid(){
   const g = $('#pr-grid'); if(!g) return; const prods = visibles();
-  if(!prods.length){ g.innerHTML = '<div class="hint"><div class="big">No hay productos</div><div class="mu">Los productos de esta área se irán agregando pronto</div></div>'; return; }
+  if(!prods.length){ g.innerHTML = '<button class="card" data-act="padd0" style="grid-column:1/-1;align-items:center;justify-content:center;min-height:calc(var(--u)*260px);border-style:dashed;cursor:pointer"><span style="font-size:96px;line-height:1;color:var(--ac,#3a2a8c)">＋</span><div class="nm" style="text-align:center;font-size:22px">Agregar el primer producto</div><div class="un" style="text-align:center">Toca aquí para crearlo</div></button>'; return; }
   let secPrev = '';
   g.innerHTML = prods.map((p, ix) => {
     const f = fichaDe(p.id), hd = (estacionDe(S.op).secciones.length > 1 && p.seccion !== secPrev) ? '<div class="gsec">' + esc(SECCION_NOMBRE[p.seccion] || p.seccion) + '</div>' : ''; secPrev = p.seccion;
@@ -1764,10 +1766,11 @@ function renderHoy(){
 function renderFichasList(){
   const prods = visibles(), falta = prods.filter(p => !tieneVida(fichaDe(p.id))).length, lista = prods.filter(p => !S.filtroFalta || !tieneVida(fichaDe(p.id)));
   return '<div class="subbar"><button class="btn" data-act="go" data-v="main">← Registrar</button><div class="subt">Fichas de producto</div></div><div class="screen">' +
-    '<div class="sec"><div class="mu">' + esc(S.op) + ': cada producto necesita su vida útil para calcular el vencimiento y sacar la etiqueta. Faltan ' + falta + ' de ' + prods.length + '. Para ver los de otra estación, cámbiala en la pantalla de registro.</div>' +
+    '<div class="sec"><div class="mu">' + esc(lbl(S.op)) + ': cada producto necesita su vida útil para calcular el vencimiento y sacar la etiqueta. Faltan ' + falta + ' de ' + prods.length + '. Para ver los de otra estación, cámbiala en la pantalla de registro.</div>' +
     '<button class="btn ' + (S.filtroFalta ? 'on' : '') + '" data-act="ffalta">' + (S.filtroFalta ? 'Mostrando solo los que faltan' : 'Mostrar solo los que faltan') + '</button>' +
-    '<button class="btn pri" data-act="padd" style="margin-top:8px">➕ Agregar producto a ' + esc(S.op) + '</button>' +
-    '<div class="row" style="margin-top:8px"><button class="btn" data-act="eadd" style="flex:1">➕ Nueva estación</button><button class="btn" data-act="edel" style="flex:1;color:#b3261e;border-color:#b3261e">🗑 Eliminar «' + esc(S.op) + '»</button></div>' +
+    '<button class="btn pri" data-act="padd" style="margin-top:8px">➕ Agregar producto a ' + esc(lbl(S.op)) + '</button>' +
+    '<div class="row" style="margin-top:8px"><button class="btn" data-act="eadd" style="flex:1">➕ Nueva estación</button><button class="btn" data-act="edel" style="flex:1;color:#b3261e;border-color:#b3261e">🗑 Eliminar «' + esc(lbl(S.op)) + '»</button></div>' +
+    '<button class="btn" data-act="eren" style="margin-top:8px">✏️ Cambiar nombre de «' + esc(lbl(S.op)) + '»</button>' +
     '<button class="btn" data-act="pvaciar" style="margin-top:8px;color:#b3261e;border-color:#b3261e">🗑 Vaciar todos los productos de este local</button></div>' +
     '<div id="pr-grid" style="padding:0">' + lista.map(p => {
       const f = fichaDe(p.id), num = prods.indexOf(p) + 1, ms = modosDe(f).map(m => MODOS[m].slice(0, 3) + ' ' + f.vida[m] + 'd').join(' · ') || 'Falta vida útil';
@@ -1779,6 +1782,7 @@ function renderFichaEdit(){
   const row = (lbl, f, val, unit) => '<div class="row"><div>' + lbl + '</div><button class="btn val" data-act="fnum" data-f="' + f + '">' + val + (unit ? ' ' + unit : '') + '</button></div>';
   const dm = m => p.vida[m] > 0 ? p.vida[m] + ' días' : 'No aplica';
   return '<div class="subbar"><button class="btn" data-act="ficha-cancel">Cancelar</button><div class="subt">' + esc(p.nombre) + '</div><button class="btn okb" data-act="ficha-save">Guardar</button></div><div class="screen">' +
+    '<div class="sec"><h3>Nombre del producto</h3><input id="pf-nom" class="btn" style="width:100%;text-align:left" maxlength="40" value="' + esc(p.nombre) + '"></div>' +
     '<div class="sec"><h3>Foto</h3><div class="fotorow">' + phHTML(p, 'big') + '<div class="col"><label class="btn pri" for="pr-ficha-foto">' + ic('camera', 24) + ' Tomar o elegir foto</label><input id="pr-ficha-foto" type="file" accept="image/*" style="position:absolute;opacity:0;width:1px;height:1px">' + (foto ? '<button class="btn" data-act="foto-del">Quitar foto</button>' : '') + '</div></div></div>' +
     '<div class="sec"><h3>Cantidades (' + esc(p.unidad) + ')</h3>' +
       row('Batch estándar', 'batch', fmt(p.batch), p.unidad) + row('Avisar si pasa de', 'max', p.max > 0 ? fmt(p.max) : '3 batches', p.max > 0 ? p.unidad : '') +
@@ -1836,8 +1840,8 @@ function estacionEliminar(){
   if(nom === 'Panadería producción'){ toast('Esa estación alimenta el Inventario de panadería y no se puede eliminar'); snd('warn'); return; }
   if(OPERADORES.length <= 1){ toast('Debe quedar al menos una estación'); snd('warn'); return; }
   const n = PROD_ALL.filter(p => estacionDe(nom).secciones.indexOf(p.seccion) >= 0).length;
-  if(n > 0){ toast('«' + nom + '» tiene ' + n + ' productos. Elimínalos primero'); snd('warn'); return; }
-  openModal('<div class="mt">¿Eliminar la estación «' + esc(nom) + '»?</div><div class="mu small" style="text-align:center">Solo de este local. Lo ya registrado no se borra.</div><div class="row"><button class="btn" data-act="mclose" style="flex:1">No</button><button class="btn okb" data-act="edel-ok" style="flex:1;background:#b3261e">Sí, eliminar</button></div>');
+  if(n > 0){ toast('«' + lbl(nom) + '» tiene ' + n + ' productos. Elimínalos primero'); snd('warn'); return; }
+  openModal('<div class="mt">¿Eliminar la estación «' + esc(lbl(nom)) + '»?</div><div class="mu small" style="text-align:center">Solo de este local. Lo ya registrado no se borra.</div><div class="row"><button class="btn" data-act="mclose" style="flex:1">No</button><button class="btn okb" data-act="edel-ok" style="flex:1;background:#b3261e">Sí, eliminar</button></div>');
 }
 function estacionEliminarOk(){
   const nom = S.op; setEstaciones(OPERADORES.filter(o => o !== nom));
@@ -1846,7 +1850,7 @@ function estacionEliminarOk(){
 }
 function modalAgregar(){
   const sec = estacionDe(S.op).secciones[0];
-  openModal('<div class="mt">Nuevo producto · ' + esc(S.op) + '</div>' +
+  openModal('<div class="mt">Nuevo producto · ' + esc(lbl(S.op)) + '</div>' +
     '<div class="mu small">Nombre</div><input id="pa-nom" class="btn" style="width:100%;text-align:left" maxlength="40" placeholder="Ej. Pan de yuca">' +
     '<div class="mu small">Cantidad de una tanda normal</div><input id="pa-batch" class="btn" style="width:100%;text-align:left" inputmode="decimal" value="10">' +
     '<div class="mu small">Unidad</div><select id="pa-uni" class="btn" style="width:100%"><option>unidades</option><option>libras</option><option>galones</option><option>fundas</option><option>paquetes</option><option>cajas</option></select>' +
@@ -1859,7 +1863,9 @@ function agregarOk(sec){
   if(batch <= 0){ snd('warn'); toast('Pon una cantidad mayor que 0'); return; }
   const pres = g('pa-pres').replace(/[|]/g, ' ').trim(), id = slug(sec + ' ' + nombre + ' ' + pres);
   if(PROD_ALL.some(x => x.id === id)){ snd('warn'); toast('Ese producto ya existe en la lista'); return; }
-  catAgregar(sec, nombre, batch, g('pa-uni'), pres); closeModal(); refrescar(); toast('Producto agregado');
+  catAgregar(sec, nombre, batch, g('pa-uni'), pres); closeModal(); toast('Producto agregado');
+  if(S.addDirecto){ S.addDirecto = false; const f = fichaDe(id); if(f){ S.fd = {id:f.id, draft:JSON.parse(JSON.stringify(f))}; S.screen = 'ficha'; render(); renderTop(); return; } }
+  refrescar();
 }
 
 /* ---------- Elegir productos de la lista ---------- */
@@ -1981,7 +1987,10 @@ function onClick(e){
     case 'reprint': { const r = S.regs.filter(x => x.id === d.id)[0]; if(r && r.vence) imprimirReg(r, true).then(ok => { if(ok) toast('Etiquetas enviadas otra vez'); }); break; }
     case 'ficha': { const f = fichaDe(d.pid); S.fd = {id:f.id, draft:JSON.parse(JSON.stringify(f))}; S.screen = 'ficha'; closeModal(); render(); renderTop(); break; }
     case 'ffalta': S.filtroFalta = !S.filtroFalta; render(); break;
-    case 'padd': modalAgregar(); break;
+    case 'padd': S.addDirecto = false; modalAgregar(); break;
+    case 'padd0': S.addDirecto = true; modalAgregar(); break;
+    case 'eren': { openModal('<div class="mt">Cambiar nombre de la estación</div><input id="pe-ren" class="btn" style="width:100%;text-align:left" maxlength="30" value="' + esc(lbl(S.op)) + '"><div class="row"><button class="btn" data-act="mclose" style="flex:1">Cancelar</button><button class="btn okb" data-act="eren-ok" style="flex:1">Guardar</button></div>', 'wide'); break; }
+    case 'eren-ok': { const v = (((document.getElementById('pe-ren') || {}).value) || '').replace(/[|#]/g, ' ').replace(/\s+/g, ' ').trim(); if(!v){ toast('Escribe el nombre de la estación'); break; } if(OPERADORES.some(o => o !== S.op && sinAc(lbl(o)).toLowerCase() === sinAc(v).toLowerCase())){ toast('Ya existe esa estación'); break; } if(v === S.op) delete ETIQ[S.op]; else ETIQ[S.op] = v; catGuardar(catLineas()); closeModal(); render(); renderTop(); toast('Nombre guardado'); break; }
     case 'pvaciar': openModal('<div class="mt">¿Vaciar TODOS los productos?</div><div class="mu small" style="text-align:center">Se quitan los ' + PROD_ALL.length + ' productos de la lista de este local (todas las estaciones). Lo ya registrado no se borra. Después los agregas uno por uno.</div><div class="row"><button class="btn" data-act="mclose" style="flex:1">No</button><button class="btn okb" data-act="pvaciar-ok" style="flex:1;background:#b3261e">Sí, vaciar</button></div>'); break;
     case 'pvaciar-ok': catGuardar(catLineas().filter(l => l.indexOf('## ') === 0)); S.pid = null; closeModal(); render(); renderTop(); toast('Lista vaciada'); break;
     case 'eadd': modalEstacion(); break;
@@ -2011,6 +2020,7 @@ function onClick(e){
 
 /* ═══ 5. ARRANQUE: Morochos OS llama a PRODREG.init() al entrar ═══ */
 document.addEventListener('click', onClick, false);
+document.addEventListener('input', e => { if(e.target && e.target.id === 'pf-nom' && S.fd){ const v = e.target.value.replace(/[|]/g, ' '); if(v.trim()) S.fd.draft.nombre = v.trim(); } });
 document.addEventListener('change', e => { if(e.target && e.target.id === 'pr-ficha-foto' && e.target.files && e.target.files[0] && S.fd) onPhoto(e.target.files[0]); });
 window.addEventListener('resize', layout);
 if(window.ResizeObserver) new ResizeObserver(() => layout()).observe(R());
@@ -2022,7 +2032,7 @@ window.PRODREG = {
   },
   setRegistros(arr){ S.regs = (arr || []).concat(S.regs.filter(x => x.prueba)).sort((a, b) => b.ts - a.ts); renderTop(); if(S.screen === 'hoy') render(); },
   setOrden(obj){ S.orden = obj || {}; if(S.screen === 'main') renderGrid(); else if(S.screen === 'fichas') render(); },
-  setCatalogo(t, est){ setEstaciones(est && est.length ? est : EST_BASE); if(OPERADORES.indexOf(S.op) < 0 || BLOQUEADAS.indexOf(S.op) >= 0) S.op = OPERADORES.filter(x => BLOQUEADAS.indexOf(x) < 0)[0] || OPERADORES[0]; CATALOGO_TEXTO = t || ''; leerCatalogo(); if(S.pid && !PROD_ALL.some(x => x.id === S.pid)) S.pid = null; if(S.ready) refrescar(); },
+  setCatalogo(t, est, etiq){ ETIQ = etiq || {}; setEstaciones(est && est.length ? est : EST_BASE); if(OPERADORES.indexOf(S.op) < 0 || BLOQUEADAS.indexOf(S.op) >= 0) S.op = OPERADORES.filter(x => BLOQUEADAS.indexOf(x) < 0)[0] || OPERADORES[0]; CATALOGO_TEXTO = t || ''; leerCatalogo(); if(S.pid && !PROD_ALL.some(x => x.id === S.pid)) S.pid = null; if(S.ready) refrescar(); },
   setFichas(obj){ S.fichas = obj || {}; if(S.screen === 'main'){ renderGrid(); renderPanel(); } else if(S.screen === 'fichas') render(); },
   productos(estacion){ return PROD_ALL.filter(p => (estacionDe(estacion).secciones.indexOf(p.seccion) >= 0)).map(p => { const f = fichaDe(p.id); return {id:p.id, nombre:f.nombre, unidad:f.unidad, presentacion:f.presentacion, foto:f.foto}; }); },
   mostrar(){ layout(); refrescar(); },
@@ -3855,13 +3865,13 @@ function iniciarProd(){
   PRODREG.init({codigo:CODIGO_MANAGER,bloqueadas:['Panadería','Cafetería','Cocina'],catalogo:CAT_PROD_TEXTO(),api:{
     guardarRegistro:r=>setDoc(doc(db,'registros_produccion',r.id),{...r,local:code,dia:getHoy(),area:r.op,fecha_registro:serverTimestamp()}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar el registro');}),
     actualizarRegistro:r=>setDoc(doc(db,'registros_produccion',r.id),{anulado:!!r.anulado,impresa:!!r.impresa},{merge:true}).catch(e=>console.error(e)),
-    guardarCatalogo:(t,est)=>setDoc(doc(db,'produccion_catalogo',code),{local:code,texto:t,estaciones:est||[],actualizado:serverTimestamp()}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar la lista de productos');}),
+    guardarCatalogo:(t,est,etiq)=>setDoc(doc(db,'produccion_catalogo',code),{local:code,texto:t,estaciones:est||[],etiquetas:etiq||{},actualizado:serverTimestamp()}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar la lista de productos');}),
     guardarFicha:f=>setDoc(doc(db,'produccion_fichas',code+'__'+f.id),{...f,local:code}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar la ficha');}),
     guardarOrden:(op,ids)=>setDoc(doc(db,'produccion_orden',`${code}__${estKey(op)}`),{local:code,op,ids,actualizado:serverTimestamp()}).catch(e=>{console.error(e);showToast('❌ No se pudo guardar el orden');}),
     alRegistrar:r=>stockProd(r,1),alDeshacer:r=>stockProd(r,-1)}});
   // cada local tiene SU lista de productos y SUS fichas; las fichas antiguas sin local siguen siendo de La Victoria
   const LV=LOCAL_CODE['La Victoria'];
-  onSnapshot(query(collection(db,'produccion_catalogo'),where('local','==',code)),snap=>{const d=snap.docs.find(x=>x.data().local===code);PRODREG.setCatalogo(d?d.data().texto:CAT_PROD_TEXTO(),d?d.data().estaciones:null);renderInv();},err=>console.error('catalogo',err));
+  onSnapshot(query(collection(db,'produccion_catalogo'),where('local','==',code)),snap=>{const d=snap.docs.find(x=>x.data().local===code);PRODREG.setCatalogo(d?d.data().texto:CAT_PROD_TEXTO(),d?d.data().estaciones:null,d?d.data().etiquetas:null);renderInv();},err=>console.error('catalogo',err));
   onSnapshot(collection(db,'produccion_fichas'),snap=>{const o={};snap.docs.forEach(d=>{const x=d.data(),dueno=x.local||LV;if(dueno!==code)return;if(x.local||!o[x.id||d.id])o[x.id||d.id]=x;});PRODREG.setFichas(o);renderInv();},err=>console.error('fichas',err));
   onSnapshot(query(collection(db,'produccion_orden'),where('local','==',code)),snap=>{const o={};snap.docs.forEach(d=>{const x=d.data();o[x.op]=x.ids||[];});PRODREG.setOrden(o);},err=>console.error('orden',err));
   suscribirRegistrosProd();
