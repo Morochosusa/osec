@@ -299,6 +299,7 @@
   .pd-card{display:flex;align-items:center;gap:14px;background:#fff;border-radius:16px;padding:12px;margin-bottom:22px;}
   .pd-th{width:84px;height:84px;flex-shrink:0;cursor:pointer;} .pd-th .pc-th{height:84px;width:84px;}
   .pd-nm b{font-size:21px;line-height:1.2;word-break:break-word;}
+  .pd-code{font-size:11px;color:var(--mu);margin-top:3px;font-family:ui-monospace,Menlo,monospace;word-break:break-all;user-select:text;}
   .pd-sec{font-size:14px;font-weight:700;color:var(--mu);letter-spacing:.04em;margin:0 8px 8px;text-transform:uppercase;}
   .pd-grp{background:#fff;border-radius:16px;overflow:hidden;}
   .pd-row{display:flex;align-items:center;gap:12px;min-height:68px;padding:0 14px;border-bottom:1px solid #ececf0;cursor:pointer;font-size:19px;}
@@ -1109,6 +1110,7 @@
       <div id="ped-grid"></div>
       <button class="bt" id="ped-nombres" style="margin:12px 10px 0;width:calc(100% - 20px);min-height:48px;font-size:15px">✎ Editar nombres de esta lista 🔒</button>
       <button class="bt" id="ped-elim" style="display:none;margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px"></button>
+      <button class="bt" id="ped-facility" style="margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px">📤 Enviar catálogo a Facility 🔒</button>
     </section>
   </div>
   <div class="bar-sticky"><div class="cnt" id="ped-count">0 productos</div><button class="bt ac" id="ped-send" disabled>Enviar a revisión</button></div>
@@ -3002,6 +3004,41 @@ function reducirFoto(file){return new Promise((res,rej)=>{
     const m=600,k=Math.min(1,m/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
     c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',0.8));};im.src=fr.result;};
   fr.readAsDataURL(file);});}
+// ── Catálogo → Facility: cada producto se refleja en `catalogo_locales` (id = producto_id). Eliminar = archivado:true, nunca se borra el documento.
+const catDocDe=(p,arch)=>({nombre:p.nombre,subcategoria:p.subcategoria||subDe(p.seccion),categoria:p.categoria,unidad_medida:p.unidad_medida||unidadDe(p),origen:'catalogo',archivado:!!arch,fecha_ms:Date.now(),actualizado:serverTimestamp()});
+let catAvisoT=0;
+async function catSync(ids,arch){
+  const lista=(Array.isArray(ids)?ids:[ids]).map(id=>CAT_TODOS.find(x=>x.id===id)).filter(Boolean);
+  try{await Promise.all(lista.map(p=>setDoc(doc(db,'catalogo_locales',p.id),catDocDe(p,arch===undefined?p.oculto:arch),{merge:true})));}
+  catch(e){console.warn('catalogo_locales',e);if(Date.now()-catAvisoT>20000){catAvisoT=Date.now();showToast('⚠️ No se avisó a Facility. Usa «Enviar catálogo a Facility».');}}
+}
+let catEnviando=false;
+async function catEnviarTodo(){
+  if(catEnviando)return;const todos=CAT_TODOS.slice();
+  if(!todos.length){showToast('⚠️ No hay productos para enviar');return;}
+  catEnviando=true;const b=$('ped-facility');if(b){b.disabled=true;b.textContent='⏳ Enviando…';}
+  let n=0;
+  try{
+    for(let i=0;i<todos.length;i+=400){
+      const lote=todos.slice(i,i+400);
+      await Promise.all(lote.map(p=>setDoc(doc(db,'catalogo_locales',p.id),catDocDe(p,p.oculto),{merge:true})));
+      n+=lote.length;
+    }
+    showToast('✅ '+n+' producto'+(n===1?'':'s')+' enviado'+(n===1?'':'s'));vib(30);
+  }catch(e){console.error(e);showToast('❌ Se enviaron '+n+' de '+todos.length+'. Intenta de nuevo.');}
+  catEnviando=false;if(b){b.disabled=false;b.textContent='📤 Enviar catálogo a Facility 🔒';}
+}
+// código del producto: área + nombre, se genera una sola vez y nunca cambia. Si ya existe se agrega _2, _3…
+async function catNuevoId(area,nombre){
+  const dl=dispositivo&&dispositivo.local,pre=dl&&dl!=='La Victoria'?(LOCAL_CODE[dl]||slugId(dl))+'__':'';
+  const base=pre+(slugId(area)||'area')+'_'+(slugId(nombre)||'producto');
+  const usado=async x=>{
+    if(CAT_TODOS.some(p=>p.id===x)||CAT_BASE.some(p=>p.id===x)||OVR[x]!==undefined)return true;
+    try{const d=await getDoc(doc(db,'catalogo_locales',x));return !!(d&&d.exists&&d.exists());}catch(e){return false;}
+  };
+  let id=base,n=2;while(await usado(id))id=base+'_'+(n++);
+  return id;
+}
 async function cfgSubirFoto(id,file){
   showToast('⏳ Subiendo foto…');
   try{const url=await reducirFoto(file);
@@ -3019,7 +3056,7 @@ async function cfgGuardarNombre(id){
   if(!base){dato.categoria=area;dato.seccion=sec;}                       // producto creado en la app
   else{dato.categoria=sinAc(area)===sinAc(base.categoria)?null:area;dato.seccion=sec===base.seccion?null:sec;}   // null = vuelve a la ubicación original
   const prev=CAT_TODOS.find(x=>x.id===id),movido=prev&&(sinAc(prev.categoria)!==sinAc(area)||prev.seccion!==sec);
-  try{await setDoc(doc(db,'productos_ajustes',id),dato,{merge:true});showToast(movido?'📍 Movido a '+sec+' · '+areaNombre(area):'✅ Producto guardado');vib();}
+  try{await setDoc(doc(db,'productos_ajustes',id),dato,{merge:true});catSync(id);showToast(movido?'📍 Movido a '+sec+' · '+areaNombre(area):'✅ Producto guardado');vib();}
   catch(e){showToast('❌ No se pudo guardar');}
 }
 // ── Crear / eliminar productos de la lista de Pedido (se guardan en productos_ajustes; eliminar = ocultar, se puede restaurar)
@@ -3034,11 +3071,11 @@ async function prodNuevoGuardar(){
   if(!categoria){showToast('⚠️ Primero crea una estación');return;}
   if(!seccion){showToast('⚠️ Primero crea una categoría');return;}
   if(CAT.some(p=>enArea(p,categoria)&&sinAc(p.nombre)===sinAc(nombre)&&sinAc(p.seccion)===sinAc(seccion))){showToast('⚠️ Ese producto ya existe en la lista');return;}
-  const id='x_'+slugId(categoria)+'_'+slugId(nombre)+'_'+Date.now().toString(36);
+  const id=await catNuevoId(categoria,nombre);
   const dato={custom:true,local:LOCAL_CODE[dispositivo.local],nombre,cant:cant>0?cant:1,resto,categoria,seccion,creado_por:(dispositivo&&dispositivo.local)||'',fecha_creacion:serverTimestamp()};
   OVR[id]=dato;aplicarOvr();pedCat=categoria;pedQ='';if($('ped-search'))$('ped-search').value='';renderPedido();renderInv();
   $('np').classList.remove('open');beep(988,.12);vib(30);showToast('✅ Producto creado');
-  try{await setDoc(doc(db,'productos_ajustes',id),dato);}catch(e){console.error(e);delete OVR[id];aplicarOvr();renderPedido();renderInv();showToast('❌ No se pudo crear el producto');}
+  try{await setDoc(doc(db,'productos_ajustes',id),dato);catSync(id);}catch(e){console.error(e);delete OVR[id];aplicarOvr();renderPedido();renderInv();showToast('❌ No se pudo crear el producto');}
 }
 let ultMov=null,pedOrdOk=false,pedOcultar=false,dragReciente=0,dragActivo=false;
 try{pedOcultar=localStorage.getItem('ped_ocultar')==='1';}catch(_){}
@@ -3142,11 +3179,11 @@ async function prodEliminar(id){
   const p=CAT_TODOS.find(x=>x.id===id);if(!p)return;
   if(!confirm('¿Eliminar "'+p.nombre+'" de la lista de pedido?\nSe puede restaurar desde «Productos eliminados», al final de la lista.'))return;
   delete pedItems[id];guardarBorrador();
-  try{await setDoc(doc(db,'productos_ajustes',id),{oculto:true},{merge:true});vib(30);showToast('🗑 Producto eliminado');}
+  try{await setDoc(doc(db,'productos_ajustes',id),{oculto:true},{merge:true});catSync(id,true);vib(30);showToast('🗑 Producto eliminado');}
   catch(e){console.error(e);showToast('❌ No se pudo eliminar');}
 }
 async function prodRestaurar(id){
-  try{await setDoc(doc(db,'productos_ajustes',id),{oculto:false},{merge:true});showToast('✅ Producto restaurado');}
+  try{await setDoc(doc(db,'productos_ajustes',id),{oculto:false},{merge:true});catSync(id,false);showToast('✅ Producto restaurado');}
   catch(e){showToast('❌ No se pudo restaurar');}
 }
 function iniciarCfg(){
@@ -3247,7 +3284,7 @@ function pdPintar(){
   $('pd-sub').textContent=main?'':(p.nombre||'');
   if(main){
     const q=pedItems[pdId]||0;
-    b.innerHTML=`<div class="pd-card"><div class="pd-th" data-r="foto" aria-label="Cambiar foto (código)">${thumb(p)}</div><div class="pd-nm" data-r="nom" style="cursor:pointer"><b>${esc(p.nombre)}</b><div style="font-size:13px;color:var(--ac);font-weight:700;margin-top:4px">✎ Cambiar nombre 🔒</div></div></div>
+    b.innerHTML=`<div class="pd-card"><div class="pd-th" data-r="foto" aria-label="Cambiar foto (código)">${thumb(p)}</div><div class="pd-nm" data-r="nom" style="cursor:pointer"><b>${esc(p.nombre)}</b><div class="pd-code">Código: ${esc(p.id||'')}</div><div style="font-size:13px;color:var(--ac);font-weight:700;margin-top:4px">✎ Cambiar nombre 🔒</div></div></div>
     <div class="pd-sec">Información</div>
     <div class="pd-grp">
       <div class="pd-row" data-r="cat"><span class="pd-ic">📚</span><span class="pd-k">Categoría 🔒</span><span class="pd-v">${esc(p.seccion||'—')}</span><span class="pd-ch">›</span></div>
@@ -3292,7 +3329,7 @@ async function pdGuardar(campos,idx){
   if(base&&'nombre' in d&&d.nombre===base.nombre)d.nombre=null;
   if(base&&'categoria' in d&&sinAc(d.categoria)===sinAc(base.categoria))d.categoria=null;
   OVR[id]={...(OVR[id]||{}),...d};aplicarOvr();renderPedido();renderInv();vib();
-  try{await setDoc(doc(db,'productos_ajustes',id),d,{merge:true});}catch(e){console.error(e);showToast('❌ No se pudo guardar');}
+  try{await setDoc(doc(db,'productos_ajustes',id),d,{merge:true});if('nombre' in d||'resto' in d||'seccion' in d||'categoria' in d)catSync(id);}catch(e){console.error(e);showToast('❌ No se pudo guardar');}
 }
 async function estGuardar(){
   const nombres={},extras=(AREAS_CFG.extras||[]).map(e=>[e[0],e[1]]),baseK=AREAS_BASE.map(a=>a[0]);
@@ -3344,6 +3381,7 @@ async function lsRenSec(viejo,nuevo){
   ps.forEach(p=>{OVR[p.id]={...(OVR[p.id]||{}),seccion:nuevo};});aplicarOvr();
   await lsGuardarCfg();
   for(const p of ps){try{await setDoc(doc(db,'productos_ajustes',p.id),{seccion:nuevo},{merge:true});}catch(e){console.error(e);}}
+  catSync(ps.map(p=>p.id));
   showToast('✅ Categoría renombrada');
 }
 function lsIniciar(){
@@ -3767,6 +3805,7 @@ function iniciarUI(){
   $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedDoble(b);});
   initArrastre();pdIniciar();lsIniciar();
   $('ped-nombres').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='noms';pdPintar();$('pd').classList.add('open');}));
+  $('ped-facility').addEventListener('click',()=>mgrCodigo(catEnviarTodo));
   $('ped-elim').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='elim';pdPintar();$('pd').classList.add('open');}));
   $('ped-cats').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const b=e.target.closest('.parea');if(b){pedCat=b.dataset.c;pedQ='';$('ped-search').value='';vib();renderPedido();}});
   $('ped-search').addEventListener('input',e=>{pedQ=e.target.value;renderPedido();});
