@@ -997,6 +997,7 @@
   <div id="rec-listado"><div id="rec-lista"></div></div>
   <div id="rec-detalle" style="display:none">
     <button class="bt" id="rec-volver" style="margin-bottom:12px">‹ Volver</button>
+    <div id="rec-cab" style="margin-bottom:10px"></div>
     <p style="color:var(--mu);margin-bottom:10px;font-size:16px">Si todo llegó bien, acepta. Si algo llegó distinto, toca el producto y escribe lo que realmente llegó.</p>
     <div class="pgrid" id="rec-items"></div>
     <div class="bar-sticky"><button class="bt ok" id="rec-ok" style="width:100%">✔ Aceptar todo</button></div>
@@ -3598,7 +3599,7 @@ function iniciarPedidos(){
   cargarBorrador();
   const unir=()=>{pedMios=[...PM_REV,...PM_LOC.filter(x=>!PM_REV.some(r=>r.id===x.id))].map(x=>(!x.estacion||x.estacion==='Lista completa')?{...x,estacion:estLabItems(x.items)}:x)
       .sort((a,b)=>(b.fecha_envio?.toMillis?.()??Date.now())-(a.fecha_envio?.toMillis?.()??Date.now()));
-    renderMisPedidos();renderSim();};
+    renderMisPedidos();renderSim();try{renderRec();}catch(e){}};
   const q=c=>query(collection(db,c),where('local','==',LOCAL_CODE[dispositivo.local]));
   onSnapshot(q('pedidos_locales'),snap=>{PM_LOC=snap.docs.map(d=>({id:d.id,...d.data()}));unir();},err=>console.error('pedidos_locales',err));
   onSnapshot(q('pedidos_revision'),snap=>{PM_REV=snap.docs.map(d=>({id:d.id,...d.data()}));unir();},err=>console.error('pedidos_revision',err));
@@ -3635,16 +3636,22 @@ async function simDespachar(id){
   await setDoc(doc(db,'pedidos_locales',id),{estado:'procesado',despacho_id:ref.id},{merge:true});
   beep(660,.15);vib(40);showToast('📦 Facility despachó el pedido (simulado). Ya aparece en «Por recibir».');
 }
+// ¿Qué lista es? número y estación: vienen en el despacho; si Facility no los copió, se busca el pedido original
+const guiaPed=g=>pedMios.find(p=>p.id===g.pedido_local_id)||null;
+const guiaNumero=g=>g.numero||(guiaPed(g)||{}).numero||0;
+const guiaEstacion=g=>g.estacion||(guiaPed(g)||{}).estacion||'';
+const guiaTitulo=g=>{const n=guiaNumero(g),e=guiaEstacion(g);return n||e?`${numHtml({numero:n})}<b>${esc(e||'Lista')}</b>`:'<b>Despacho</b>';};
 function renderRec(){
   renderSim();
   if(!$('rec-lista'))return;
   const det=recAbierta?GUIAS.find(g=>g.id===recAbierta):null;
   $('rec-listado').style.display=det?'none':'block';$('rec-detalle').style.display=det?'block':'none';
   if(!det){
-    $('rec-lista').innerHTML=GUIAS.map(g=>`<button class="guia" data-id="${esc(g.id)}"><div><b>Despacho · ${fechaTxt(g.fecha_despacho)}</b><br><small>${esc(g.despachado_por||'Facility')} · ${(g.items||[]).length} productos</small></div><span class="tag wn">Por recibir ›</span></button>`).join('')
+    $('rec-lista').innerHTML=GUIAS.map(g=>`<button class="guia" data-id="${esc(g.id)}"><div>${guiaTitulo(g)}<br><small>Despacho · ${fechaTxt(g.fecha_despacho)} · ${esc(g.despachado_por||'Facility')} · ${(g.items||[]).length} productos</small></div><span class="tag wn">Por recibir ›</span></button>`).join('')
       ||'<div class="vacio">No hay despachos por recibir. 🎉</div>';
     return;
   }
+  if($('rec-cab'))$('rec-cab').innerHTML=`<div class="guia" style="cursor:default"><div>${guiaTitulo(det)}<br><small>Despacho · ${fechaTxt(det.fecha_despacho)} · ${(det.items||[]).length} productos</small></div></div>`;
   const hay=det.items.some((it,i)=>recib[i]&&recib[i].cant!==it.cantidad_despachada);
   $('rec-items').innerHTML=det.items.map((it,i)=>{
     const r=recib[i],dif=r&&r.cant!==it.cantidad_despachada;
