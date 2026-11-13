@@ -263,6 +263,23 @@
   .tag.er{background:var(--erbg);color:var(--er);}
   .tag.wn{background:var(--wnbg);color:var(--wn);} .tag.ac{background:var(--acbg);color:var(--ac);} .tag.ok{background:var(--okbg);color:var(--ok);}
   .vacio{text-align:center;color:var(--mu);padding:30px 10px;font-size:17px;}
+  /* Inventario: vista de existencias (como Facility EC) */
+  .ist-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .ist-chip{min-height:46px;padding:0 16px;border-radius:999px;border:2px solid var(--bd);background:#fff;font:600 16px inherit;font-family:inherit;color:var(--black);cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .ist-chip.sel{border-color:var(--black);background:var(--black);color:#fff;} .ist-chip.wn{border-color:#e9b04a;background:var(--wnbg);} .ist-chip.wn.sel{background:var(--wn);border-color:var(--wn);color:#fff;}
+  .ist-cnt{font-size:14px;color:var(--mu);margin:6px 2px 8px;}
+  .ist-list{background:#fff;border:2px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:90px;}
+  .ist-head,.ist-row{display:flex;align-items:center;gap:12px;padding:10px 14px;}
+  .ist-head{background:var(--s2);font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;}
+  .ist-row{border-top:1px solid var(--bd);min-height:68px;}
+  .ist-row .th{width:46px;height:46px;border-radius:10px;overflow:hidden;flex:none;background:var(--s2);display:flex;align-items:center;justify-content:center;}
+  .ist-row .th img{width:100%;height:100%;object-fit:cover;}
+  .ist-n{flex:1;min-width:0;font-size:17px;font-weight:700;line-height:1.2;word-break:break-word;}
+  .ist-n small{display:block;font-weight:500;color:var(--mu);font-size:13px;margin-top:2px;}
+  .ist-q{text-align:right;font-size:20px;font-weight:800;white-space:nowrap;} .ist-q small{font-size:13px;font-weight:600;color:var(--mu);margin-left:3px;}
+  .ist-e{flex:none;width:92px;text-align:center;font-size:13px;font-weight:800;border-radius:999px;padding:5px 8px;}
+  .ist-e.ok{background:var(--okbg);color:var(--ok);} .ist-e.ag{background:var(--erbg);color:var(--er);} .ist-e.sn{background:var(--s2);color:var(--mu);}
+  @media (max-width:520px){.ist-e{width:auto;font-size:12px;padding:4px 8px;}.ist-q{font-size:18px;}.ist-head .h-e{display:none;}}
   .qrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .qchip{min-height:56px;padding:0 20px;border-radius:14px;border:2px solid var(--bd);background:#fff;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;color:var(--black);}
   .qchip.sel{background:var(--ac);border-color:var(--ac);color:#fff;}
@@ -1127,6 +1144,14 @@
   <div class="qrow areabar" id="invh-tabs"></div>
   <div id="pan-root"></div>
   <div id="inv-conteo" style="display:none">
+   <div id="inv-stock">
+    <input type="search" class="form-control" id="ist-search" placeholder="🔍 Buscar producto…" style="margin-bottom:10px">
+    <div class="ist-chips" id="ist-chips"></div>
+    <div class="ist-cnt" id="ist-cnt"></div>
+    <div class="ist-list" id="ist-list"></div>
+   </div>
+   <div id="inv-cnt" style="display:none">
+    <button class="bt" id="inv-volver" style="margin-bottom:12px">‹ Volver al inventario</button>
     <p style="color:var(--mu);margin-bottom:10px">Toca un producto y escribe cuánto hay. Cuenta el día de hoy y guarda.</p>
     <div class="lbl">¿Quién cuenta?</div>
     <div class="qrow" id="inv-quien"></div>
@@ -1135,6 +1160,7 @@
     <div class="card vacio" id="inv-vacio" style="display:none">No hay productos en esta área todavía.</div>
     <div class="pgrid" id="inv-grid"></div>
     <div class="bar-sticky"><div class="cnt" id="inv-count">0 contados</div><button class="bt ac" id="inv-save" disabled>Guardar inventario</button></div>
+   </div>
   </div>
 </div>
 
@@ -3750,7 +3776,8 @@ async function recDeshacer(gid){
 // ═══════════════════════════════════════════════
 let invCat='cocina',invQ='',invCargado='';
 const invStore={};let invCant={};invStore.cocina=invCant;        // conteos por área
-let invStock={};                                                  // existencias (sistema) por área__producto
+let invStock={},invStockT={},invStockM={};                                      // existencias (sistema) por área__producto + cuándo se actualizó
+let invModo='stock',invFiltro='todos',invSQ='';                  // vista: existencias (por defecto) o conteo
 const invDocId=()=>`${dispositivo.local}_${estKey(invCat)}_${getHoy()}`;
 // productos de un área: los del catálogo + los que se producen ahí (ej. los panes de Panadería producción)
 function invItems(area){
@@ -3768,7 +3795,34 @@ async function invCargar(){
     if(snap.exists())(snap.data().items||[]).forEach(i=>{if(invCant[i.id]===undefined)invCant[i.id]=i.cantidad;});invCargado=doc0;}catch(e){}
   renderInv();
 }
+function renderStock(){
+  if(!$('ist-list'))return;
+  const q=sinAc(invSQ),todos=invItems(invCat).slice();
+  // lo recibido o contado que ya no está en la lista de pedido del área (ej. producto retirado) también se ve
+  const ek=estKey(invCat),conocidos=new Set(todos.map(p=>ek+'__'+(p._prod?p.pid:p.id)));
+  Object.keys(invStockM).forEach(k=>{if(k.indexOf(ek+'__')===0&&!conocidos.has(k)){const m=invStockM[k];todos.push({id:m.pid,nombre:m.nombre,unidad_medida:m.unidad,categoria:invCat});}});
+  const fila=p=>({p,st:stockDe(p.categoria,p),t:invStockT[estKey(p.categoria)+'__'+(p._prod?p.pid:p.id)]});
+  const all=todos.map(fila).sort((a,b)=>sinAc(a.p.nombre).localeCompare(sinAc(b.p.nombre)));
+  const ago=all.filter(x=>x.st!==undefined&&x.st<=0).length,sin=all.filter(x=>x.st===undefined).length;
+  let l=all.filter(x=>!q||sinAc(x.p.nombre).includes(q));
+  if(invFiltro==='agotados')l=l.filter(x=>x.st!==undefined&&x.st<=0);
+  if(invFiltro==='sin')l=l.filter(x=>x.st===undefined);
+  $('ist-chips').innerHTML=`<button class="ist-chip ${invFiltro==='todos'?'sel':''}" data-f="todos">${all.length} productos</button>`+
+    `<button class="ist-chip wn ${invFiltro==='agotados'?'sel':''}" data-f="agotados">${ago} agotado${ago===1?'':'s'}</button>`+
+    (sin?`<button class="ist-chip ${invFiltro==='sin'?'sel':''}" data-f="sin">${sin} sin conteo</button>`:'')+
+    `<button class="ist-chip" data-f="conteo">📋 Conteo</button>`;
+  $('ist-cnt').textContent=`${areaNombre(invCat)} · ${l.length} producto${l.length===1?'':'s'}`;
+  $('ist-list').innerHTML=l.length?`<div class="ist-head"><span style="flex:1">Producto</span><span>Stock actual</span><span class="h-e" style="width:92px;text-align:center">Estado</span></div>`+
+    l.map(x=>{const p=x.p,st=x.st,u=p.unidad_medida||'';
+      const est=st===undefined?['sn','Sin conteo']:st<=0?['ag','Agotado']:['ok','En stock'];
+      return `<div class="ist-row"><div class="th">${p.foto?`<img src="${esc(p.foto)}" alt="">`:`<span style="font-weight:800;font-size:15px;color:var(--mu)">${esc(iniciales(p.nombre))}</span>`}</div>
+        <div class="ist-n">${esc(p.nombre)}<small>${esc(u)}${x.t?' · act. '+esc(fechaTxt(x.t)):''}</small></div>
+        <div class="ist-q">${st===undefined?'—':fmtN(st)}<small>${st===undefined?'':esc(u)}</small></div><span class="ist-e ${est[0]}">${est[1]}</span></div>`;}).join(''):
+    `<div class="vacio">${all.length?'Sin resultados.':'No hay productos en esta área todavía.'}</div>`;
+}
+function invVista(){const c=invModo==='conteo';$('inv-stock').style.display=c?'none':'block';$('inv-cnt').style.display=c?'block':'none';}
 function renderInv(){
+  invVista();if(invModo==='stock'){renderStock();return;}
   if(!$('inv-grid'))return;
   $('inv-cats').innerHTML=AREAS.map(([c,l])=>`<button class="qchip ${c===invCat?'sel':''}" data-c="${esc(c)}">${l}</button>`).join('');
   const q=sinAc(invQ);
@@ -3792,13 +3846,13 @@ async function invGuardar(){
     // lo contado pasa a ser la existencia de esa área
     its.forEach(p=>{const pid=p._prod?p.pid:p.id;
       setDoc(doc(db,'inventario_estacion',`${code}__${ek}__${pid}`),{local:code,estacion:lab,estacion_key:ek,producto_id:pid,producto_nombre:p.nombre,unidad_medida:p.unidad_medida||'',categoria:ek,cantidad:invCant[p.id],actualizado:serverTimestamp()},{merge:true}).catch(e=>console.error(e));});
-    beep(988,.15);vib(40);showToast('✅ Inventario guardado');}
+    beep(988,.15);vib(40);showToast('✅ Inventario guardado');invModo='stock';}
   catch(e){console.error(e);showToast('❌ No se pudo guardar');}
   renderInv();
 }
 function iniciarStock(){
   onSnapshot(query(collection(db,'inventario_estacion'),where('local','==',LOCAL_CODE[dispositivo.local])),snap=>{
-    invStock={};snap.docs.forEach(d=>{const x=d.data();invStock[(x.estacion_key||'general')+'__'+x.producto_id]=x.cantidad;});renderInv();
+    invStock={};invStockT={};invStockM={};snap.docs.forEach(d=>{const x=d.data(),k=(x.estacion_key||'general')+'__'+x.producto_id;invStock[k]=x.cantidad;invStockT[k]=x.actualizado;invStockM[k]={pid:x.producto_id,nombre:x.producto_nombre||x.producto_id,unidad:x.unidad_medida||''};});renderInv();
   },err=>console.error('inventario_estacion',err));
 }
 
@@ -3809,6 +3863,9 @@ function iniciarUI(){
   $('inv-cats').addEventListener('click',e=>{const b=e.target.closest('.qchip');if(b){invCat=b.dataset.c;vib();invCargar();}});
   $('inv-search').addEventListener('input',e=>{invQ=e.target.value;renderInv();});
   $('inv-save').addEventListener('click',invGuardar);
+  $('ist-search').addEventListener('input',e=>{invSQ=e.target.value;renderStock();});
+  $('ist-chips').addEventListener('click',e=>{const b=e.target.closest('[data-f]');if(!b)return;vib();if(b.dataset.f==='conteo'){invModo='conteo';invCargar();window.scrollTo(0,0);return;}invFiltro=b.dataset.f;renderStock();});
+  $('inv-volver').addEventListener('click',()=>{vib();invModo='stock';renderInv();});
   $('ped-grid').addEventListener('click',e=>{if(Date.now()-dragReciente<400)return;const ed=e.target.closest('[data-ed]');if(ed){vib();const id=ed.dataset.ed;if(pedItems[id]===undefined){pedItems[id]=(CAT.find(x=>x.id===id)||{}).cant||1;guardarBorrador();renderPedido();}abrirQty(id);return;}const b=e.target.closest('.prow');if(b)pedDoble(b);});
   initArrastre();pdIniciar();lsIniciar();
   $('ped-nombres').addEventListener('click',()=>mgrCodigo(()=>{pdId=null;pdVista='noms';pdPintar();$('pd').classList.add('open');}));
@@ -4281,7 +4338,7 @@ function panTab(t){
   INV_T=t;PAN.tab=t==='pan'?'pan':'otro';
   pintarInvTabs();
   $('pan-root').style.display=t==='pan'?'block':'none';$('inv-conteo').style.display=t==='pan'?'none':'block';
-  if(t==='pan'){panSuscribir();renderPan();}else{invCat=t;invCargar();}
+  if(t==='pan'){panSuscribir();renderPan();}else{invCat=t;invModo='stock';invFiltro='todos';invSQ='';if($('ist-search'))$('ist-search').value='';invCargar();}
 }
 
 // ── ENTRADA ──
