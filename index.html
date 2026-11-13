@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -416,6 +416,7 @@
   .pr-ed{width:78px;height:auto;min-height:66px;border-radius:0;border:none;border-left:1px solid var(--bd);background:transparent;font-size:26px;color:var(--er);}
   .prow.sel .pr-ed{color:var(--ac);}
   @media (max-width:760px){.ped2{grid-template-columns:1fr;height:auto}.ped-right{overflow:visible}.ped-left{position:static;max-height:none;border-right:none;border-bottom:2px solid var(--bd)}.pl-areas{display:grid;grid-template-columns:1fr 1fr}}
+  .ped-bottom{margin:16px 10px 90px;}
   .ped-top{display:flex;gap:10px;margin-top:10px;} .ped-top .bt{flex:1;min-height:56px;font-size:17px;} .ped-top .badge{display:none;margin-left:6px;font-size:15px;padding:2px 9px;}
   .ped2{margin-top:10px;height:calc(100vh - 372px);height:calc(100dvh - 372px);}
   .ov-box{display:flex;flex-direction:column;height:100%;overflow:hidden;padding:14px 16px 0;}
@@ -1110,10 +1111,6 @@
 
 <!-- ═══ PEDIDO → Facility ═══ -->
 <div class="page" id="page-pedido">
-  <div class="ped-top">
-    <button class="bt" id="btn-rev">📋 Por revisar <span class="badge" id="rev-n"></span></button>
-    <button class="bt" id="btn-mios">🕘 Pedidos enviados</button>
-  </div>
   <div class="ped2">
     <aside class="ped-left">
       <div class="pl-head">📁 <span id="pl-local"></span></div>
@@ -1130,6 +1127,10 @@
       <button class="bt" id="ped-elim" style="display:none;margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px"></button>
       <button class="bt" id="ped-facility" style="margin:12px 10px;width:calc(100% - 20px);min-height:48px;font-size:15px">📤 Enviar catálogo a Facility 🔒</button>
     </section>
+  </div>
+  <div class="ped-top ped-bottom">
+    <button class="bt" id="btn-rev">📋 Por revisar <span class="badge" id="rev-n"></span></button>
+    <button class="bt" id="btn-mios">🕘 Pedidos enviados</button>
   </div>
   <div class="bar-sticky"><div class="cnt" id="ped-count">0 productos</div><button class="bt ac" id="ped-send" disabled>Enviar a revisión</button></div>
 
@@ -3249,14 +3250,14 @@ function renderPedido(){
   $('pl-local').textContent=dispositivo.local.toUpperCase();
   $('ped-cats').innerHTML=AREAS.map(([c,l])=>{const em=l.split(' ')[0],nom=l.slice(em.length+1);
     const tot=CAT.filter(p=>enArea(p,c)).length,sel=CAT.filter(p=>enArea(p,c)&&pedItems[p.id]!==undefined).length;
-    const bt=`<button class="parea ${c===pedCat&&!sinAc(pedQ)?'act':''}" data-c="${esc(c)}"><span class="pa-ic">${em}</span><span class="pa-tx"><b>${esc(nom)}</b><small>${tot?(sel?sel+' por pedir':'Nada por pedir')+' · '+tot+' productos':'Sin productos'}</small></span></button>`;
+    const bt=`<button class="parea ${c===pedCat?'act':''}" data-c="${esc(c)}"><span class="pa-ic">${em}</span><span class="pa-tx"><b>${esc(nom)}</b><small>${tot?(sel?sel+' por pedir':'Nada por pedir')+' · '+tot+' productos':'Sin productos'}</small></span></button>`;
     return bt;}).join('');
   const q=sinAc(pedQ);
-  const listaTodos=q?CAT.filter(p=>sinAc(p.nombre).includes(q)):CAT.filter(p=>enArea(p,pedCat));
+  const listaTodos=q?CAT.filter(p=>enArea(p,pedCat)&&sinAc(p.nombre).includes(q)):CAT.filter(p=>enArea(p,pedCat));   // la búsqueda se limita a la estación elegida
   const lista=pedOcultar?listaTodos.filter(p=>pedItems[p.id]!==undefined):listaTodos;   // si buscas, busca en todas las áreas
   if(AREAS.length&&!AREAS.some(a=>a[0]===pedCat))pedCat=AREAS[0][0];
   const aInfo=AREAS.find(a=>a[0]===pedCat)||AREAS[0]||['','📋 Lista de pedido'];const nSel=listaTodos.filter(p=>pedItems[p.id]!==undefined).length;
-  $('pr-title').textContent=q?'🔍 Resultados':aInfo[1].toUpperCase();
+  $('pr-title').textContent=aInfo[1].toUpperCase();
   $('pr-sub').textContent=nSel?`${nSel} por pedir`:'Nada por pedir';
   $('ped-vacio').style.display=lista.length?'none':'block';
   $('ped-vacio').textContent=!AREAS.length?'Esta lista está vacía. Empieza creando una estación (ej. Cocina) y una categoría (ej. Mercado); luego agrega tus productos con ➕ Producto nuevo.':(pedOcultar&&listaTodos.length)?'Nada por pedir en esta lista. Toca el ojo para ver todos los productos.':'No hay productos en esta área todavía.';
