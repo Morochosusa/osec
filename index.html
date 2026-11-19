@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -2106,7 +2106,7 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 let db;
-try{ db = initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})}); }   // guarda datos sin conexión
+try{ db = initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()}),ignoreUndefinedProperties:true}); }   // guarda datos sin conexión
 catch(e){ db = getFirestore(app); }
 const storage = getStorage(app);
 
@@ -4585,7 +4585,7 @@ const MOT_ANUL = ['Error de captura', 'Duplicada', 'Mercadería devuelta', 'Otro
 const PASOS = ['Proveedor', 'Productos', 'Comprobante', 'Confirmar'];
 const COLD = {refrigerado:{max:5, txt:'Refrigerado: hasta 5 °C'}, congelado:{max:-12, txt:'Congelado: −12 °C o menos'}};
 
-const R = {tab:'nueva', nw:{}, old:{}, provs:[], d:null, id:null, step:1, q:'', fq:'', filtro:'todas', det:null, m:null, busy:false, ready:false, foto:{}, resp:LSg('resp', ''), respOtro:false, pend:null, delOk:null, t:null};
+const R = {tab:'prec', admHasta:0, nw:{}, old:{}, provs:[], d:null, id:null, step:1, q:'', fq:'', filtro:'todas', det:null, m:null, busy:false, ready:false, foto:{}, resp:LSg('resp', ''), respOtro:false, pend:null, delOk:null, t:null};
 const cat = () => A.items();
 const catPor = id => cat().filter(x => x.id === id)[0] || null;
 const mail = () => null;
@@ -4639,7 +4639,11 @@ function toast(m){
   let t = $('#rx-toast'); if(!t){ t = document.createElement('div'); t.id = 'rx-toast'; document.body.appendChild(t); }
   t.textContent = m; t.className = 'show'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = ''; }, 3200);
 }
-const errTxt = e => (e && (e.code === 'unavailable' || /offline|network|unavailable/i.test(String(e.message || e)))) ? 'Sin conexión. No se guardó; vuelve a intentar cuando haya internet.' : 'No se pudo guardar. Revisa la conexión.';
+const errTxt = e => { const c = String((e && e.code) || ''), m = String((e && e.message) || e || '');
+  if(c === 'unavailable' || /offline|network|unavailable/i.test(m)) return 'Sin conexión. No se guardó; vuelve a intentar cuando haya internet.';
+  if(/permission|denied/i.test(c + m)) return '❌ Firebase no permite guardar (reglas sin publicar o sin permiso)';
+  if(/resource-exhausted|quota/i.test(c + m)) return '❌ Firebase llegó a su límite diario. Intenta más tarde o pasa a Blaze.';
+  return 'No se pudo guardar' + (c ? ' (' + c.replace('functions/', '') + ')' : '') + '. Revisa la conexión.'; };
 function num(titulo, unidad, valor, cb, dec){
   A.teclado(titulo, valor != null && valor !== '' ? String(valor) : '', unidad || '', v => cb(v));
 }
@@ -4689,14 +4693,16 @@ function descartar(id){
 }
 
 /* ---------- pantallas ---------- */
+const rxAdm = () => Date.now() < R.admHasta;   // modo «con código»: se activa con el código del manager y dura 10 min
 function tabs(){
   const n = borradores().length;
   const np = porRecibir().length;
-  return '<div class="rx-tabs">' + [['nueva', '＋ Nueva'], ['prec', 'Por recibir' + (np + n ? ' <i>' + (np + n) + '</i>' : '')], ['hist', 'Historial']].map(t => '<button class="rx-tab ' + (R.tab === t[0] ? 'on' : '') + '" data-rx="tab" data-v="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
+  return '<div class="rx-tabs">' + [rxAdm() ? ['nueva', '＋ Nueva'] : null, ['prec', 'Por recibir' + (np + n ? ' <i>' + (np + n) + '</i>' : '')], ['hist', 'Historial']].filter(Boolean).map(t => '<button class="rx-tab ' + (R.tab === t[0] ? 'on' : '') + '" data-rx="tab" data-v="' + t[0] + '">' + t[1] + '</button>').join('') + '<button class="rx-tab" data-rx="' + (rxAdm() ? 'adm-off' : 'adm-on') + '" style="flex:0 0 56px;" aria-label="Modo con código">' + (rxAdm() ? '🔓' : '🔒') + '</button></div>';
 }
 function render(){
   const r = $('#rx-root'); if(!r) return;
   let h;
+  if(R.tab === 'nueva' && !rxAdm() && !R.d) R.tab = 'prec';   // «Nueva» solo con código
   if(R.d) h = vFlujo();
   else if(R.det) h = vDetalle();
   else h = tabs() + (R.tab === 'prec' ? vPrec() : R.tab === 'hist' ? vHist() : vNueva());
@@ -5046,8 +5052,10 @@ function onClick(e){
   const a = t.getAttribute('data-rx'), v = t.getAttribute('data-v'), id = t.getAttribute('data-id'), i = parseInt(t.getAttribute('data-i'), 10), n = parseInt(t.getAttribute('data-n'), 10);
   const d = R.d;
   switch(a){
-    case 'tab': R.tab = v; R.det = null; R.delOk = null; render(); break;
-    case 'nuevo': nuevoBorrador(); render(); window.scrollTo(0, 0); break;
+    case 'tab': if(v === 'nueva' && !rxAdm()) break; R.tab = v; R.det = null; R.delOk = null; render(); break;
+    case 'adm-on': A.codigo(() => { R.admHasta = Date.now() + 10 * 60000; render(); toast('🔓 Modo con código: 10 minutos'); }); break;
+    case 'adm-off': R.admHasta = 0; if(R.tab === 'nueva' && !R.d) R.tab = 'prec'; render(); toast('🔒 Modo con código cerrado'); break;
+    case 'nuevo': { const go = () => { nuevoBorrador(); render(); window.scrollTo(0, 0); }; if(rxAdm()) go(); else A.codigo(go); break; }
     case 'salir': salir(); break;
     case 'step': if(d){ if(n > R.step && !paso1ok(n)) break; R.step = n; guardar(); render(); window.scrollTo(0, 0); } break;
     case 'atras': R.step = Math.max(1, R.step - 1); guardar(); render(); window.scrollTo(0, 0); break;
@@ -5088,8 +5096,8 @@ function onClick(e){
     case 'confirmar': confirmar(); break;
     case 'pend-open': abrirBorrador(id); break;
     case 'prec-open': abrirPorRecibir(id); break;
-    case 'prec-del': if(R.delOk === id){ descartar(id); } else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
-    case 'pend-del': if(R.delOk === id) descartar(id); else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
+    case 'prec-del': if(!rxAdm()){ A.codigo(() => descartar(id)); break; } if(R.delOk === id){ descartar(id); } else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
+    case 'pend-del': if(!rxAdm()){ A.codigo(() => descartar(id)); break; } if(R.delOk === id) descartar(id); else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
     case 'filtro': R.filtro = v; render(); break;
     case 'hist-open': R.det = id; render(); window.scrollTo(0, 0); break;
     case 'det-volver': R.det = null; render(); break;
