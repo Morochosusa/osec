@@ -4803,6 +4803,7 @@ function vLista(){
   return bar + (PL.sub === 'pedir' ? vPedir() : PL.sub === 'recibir' ? vPrec() + '<button class="rx-b" data-rx="nuevo" style="margin-top:14px;width:100%">＋ Recepción sin pedido 🔒</button>' : PL.sub === 'hist' ? vHist() : vProvs());
 }
 /* ---- Por pedir: lo que llegó de la lista aprobada (categoría Proveedores). Eliges proveedor y lo mandas por WhatsApp ---- */
+const WA_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-4px" aria-hidden="true"><path fill="#25D366" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z"/><path fill="#fff" d="M8.6 7.3c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.9 4.4 4 2.200.9 2.600.7 3.100.7.500-.1 1.500-.6 1.700-1.200.2-.6.2-1.100.2-1.200-.1-.1-.3-.2-.6-.3l-1.800-.9c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.3-.1-1.100-.4-2-1.200-.7-.7-1.200-1.500-1.400-1.800-.1-.3 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5z"/></svg>';
 const ppProvDe = it => it.proveedor || ((R.provs.filter(p => plProds(p).some(x => x.id === it.producto_id))[0]) || {}).nombre || '';
 function vPedir(){
   const d = PL.pp && R.pp.filter(x => x.id === PL.pp)[0];
@@ -4823,9 +4824,11 @@ function vPedirDet(d){
       return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><div><b>' + (k + 1) + '. ' + esc(it.producto_nombre) + '</b> <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></div>' +
         '<select class="rx-in" data-pp="' + k + '" style="margin-top:4px"><option value="">Elegir proveedor…</option>' + nombres.map(n => '<option value="' + esc(n) + '"' + (n === pr ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '<option value="__nuevo">＋ Proveedor nuevo…</option></select></div>';
     }).join('') + '</div>';
-  Object.keys(grupos).forEach(pr => {
+  const faltan = items.filter(it => !it.enviado && !ppProvDe(it)).length;
+  if(faltan) h += '<div class="rx-mu c">Elige el proveedor de los ' + faltan + ' producto' + (faltan === 1 ? '' : 's') + ' que faltan para poder enviar el pedido.</div>';
+  else Object.keys(grupos).forEach(pr => {
     h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
-      '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">💬 Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>';
+      '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>';
   });
   return h;
 }
@@ -4994,7 +4997,7 @@ function vPrec(){
   const l = porRecibir();
   if(!l.length && borradores().length) return vPend();
   if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
-  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.proveedor ? esc(r.proveedor) + ' · ' : '') + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.orden_codigo ? '<div class="rx-mu">Orden ' + esc(r.orden_codigo) + (r.fecha_entrega ? ' · Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) : '') + '</div>' : '') + '<div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
+  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b style="font-size:16px">' + ((r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') || 'Pedido') + ((r.items || []).length > 4 ? '…' : '') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + '</div><div class="rx-mu">Proveedor: <b>' + esc(r.proveedor || '—') + '</b></div><div class="rx-mu">' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.orden_codigo ? '<div class="rx-mu">Orden ' + esc(r.orden_codigo) + (r.fecha_entrega ? ' · Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) : '') + '</div>' : '') + '<span class="rx-b ac" style="margin-top:8px">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
     '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
