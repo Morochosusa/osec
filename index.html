@@ -4847,8 +4847,7 @@ function ppEnviar(d, prov, wa){
   const nOrd = (d.n_orden || 0) + 1, codigo = 'OP-' + (d.numero || '0') + '-' + nOrd, fEnt = d.fecha_entrega || ppManana();
   if(wa){
     const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
-    const msg = '*ORDEN DE PEDIDO N.º ' + codigo + '*\nMorochos Coffee · ' + A.localNombre() + '\n\nEstimado/a ' + prov + ':\n\nPor medio de la presente solicitamos el siguiente pedido:\n\n' + lineas +
-      '\n\n*Fecha de entrega:* ' + ppFechaLarga(fEnt) + '\n\nAgradecemos confirmar la recepción de esta orden y la fecha de entrega.\n\nAtentamente,\nMorochos Coffee · ' + A.localNombre();
+    const msg = '*ORDEN DE PEDIDO N.º ' + codigo + '*\nMorochos Coffee · ' + A.localNombre() + '\n\n' + lineas + '\n\n*Fecha de entrega:* ' + ppFechaLarga(fEnt) + '\n\nFavor confirmar la recepción de esta orden.';
     window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
   }
   const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
