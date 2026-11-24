@@ -1005,7 +1005,7 @@
 <div class="page" id="page-recepcion">
   <div class="rcx-sw" id="rcx-sw">
     <button data-s="fac" class="on">🏭 Facility <i id="rcx-n-fac"></i></button>
-    <button data-s="prov">🚚 Proveedores <i id="rcx-n-prov"></i></button>
+    <button data-s="lista">🚚 Proveedores <i id="rcx-n-lista"></i></button>
   </div>
   <div id="rcx-fac">
   <div id="rcx-sim"></div>
@@ -2284,7 +2284,7 @@ const unicos = a => [...new Set(a)];
 const LISTA_PAN_VENTA = unicos([...PRODUCTOS_PROD.map(sinTanda),'Pan chola','Arepa','Pan de bono','Pan de leche','Pan de chocolate','Muffin','Cheesecake']);
 const LISTA_CAFETERIA = ['Morocho 10oz','Morocho 16oz','Chocolate 10oz','Chocolate 16oz','Avena piña 10oz','Avena piña 16oz','Avena leche 10oz','Avena leche 16oz','Café filtrado','Avena fría 16oz','Capuchino','Latte','Moccacino','Jugo','Batido','Smoothie','Extracto','Manzana verde','Manzana roja','Pepino','Naranja','Piña picada','Jengibre','Espinaca','Kale','Gelatina'];
 const LISTA_COCINA = ['Empanada carne','Empanada pollo','Empanada verde','Bolón','Empanada de viento','Maduro con queso','Tortilla de tiesto','Tortilla de yuca','Tamal','Humitas','Ensalada','Sandwich jamón y queso'];
-const TAB_LABEL = {clock:'⏰',check:'✅ Actividades',prod:'🍞 Producción',bajas:'📉 Bajas',tips:'💵 Tips',pedido:'📦 Pedido',equipo:'🔧 Mi equipo',mant:'🛠 Mantenimiento',guia:'📖 Productos',inventario:'📋 Inventario',porrecibir:'📥 Por recibir',recepcion:'🚚 Recepción'};
+const TAB_LABEL = {clock:'⏰',check:'✅ Actividades',prod:'🍞 Producción',bajas:'📉 Bajas',tips:'💵 Tips',pedido:'📦 Lista',equipo:'🔧 Mi equipo',mant:'🛠 Mantenimiento',guia:'📖 Productos',inventario:'📋 Inventario',porrecibir:'📥 Por recibir',recepcion:'🚚 Pedidos'};
 const ESTACIONES = {
   'Panadería producción': {
     icon:'🥖',
@@ -3505,14 +3505,13 @@ function qtyCerrar(){
 }
 const estLabItems=items=>{const ks=[];(items||[]).forEach(i=>{const k=sinAc(i.categoria||'');if(k&&!ks.some(x=>sinAc(x)===k))ks.push(i.categoria);});const o=k=>{const x=AREAS.findIndex(a=>sinAc(a[0])===sinAc(k));return x<0?99:x;};return ks.sort((a,b)=>o(a)-o(b)).map(areaNombre).join(' + ')||'Pedido';};
 const areaNombre=k=>{const a=AREAS.find(x=>sinAc(x[0])===sinAc(k));return a?a[1].slice(a[1].indexOf(' ')+1):String(k||'');};
-// Recepción › Por recibir: la lista de Proveedores se crea cuando el encargado APRUEBA y el pedido sale a Facility
-function provDoc(area,items,pnum){
+function provDoc(area,items,pnum,prov){
   const code=LOCAL_CODE[dispositivo.local];
   return {empresa:'morochos_ec',bodega:code,local:code,establecimiento:code,modulo:'rx1',estado:'por_recibir',origen:'pedido',pedido_numero:pnum?'P'+pnum:null,pedido_estacion:areaNombre(area),
-    destino:estKey(area),proveedor:'',proveedor_id:null,documento:'',comprobante:{foto:false,excepcion:null},
+    destino:estKey(area),proveedor:prov||'',proveedor_id:prov?'prov_'+slugId(prov):null,documento:'',comprobante:{foto:false,excepcion:null},
     items:items.map(i=>({producto_id:i.producto_id,nombre:i.producto_nombre,unidad:i.unidad_medida||'unidades',facturado:null,recibido:null,rechazado:0,motivos:[],motivo_texto:'',destino:'directo',provisional:false,vinculado:true,revisado:false,
       conservacion:'ambiente',temperatura_c:null,peso_valor:0,peso_unidad:'kg',lote_proveedor:'',vence:'',nota_item:'',pedido:i.cantidad,seccion:i.seccion})),
-    observaciones:'',responsable:'',creado_por_email:'',orden_compra_id:null,paso:1,historial:[{ts:new Date().toISOString(),accion:'lista aprobada y enviada a Facility',por:areaNombre(area)+' · '+dispositivo.local,detalle:''}],
+    observaciones:'',responsable:'',creado_por_email:'',orden_compra_id:null,paso:1,historial:[{ts:new Date().toISOString(),accion:'pedido enviado al proveedor',por:areaNombre(area)+' · '+dispositivo.local,detalle:''}],
     fecha_creacion:serverTimestamp(),fecha_actividad:serverTimestamp()};
 }
 function pedEnviar(){
@@ -3612,12 +3611,13 @@ async function revAprobar(id){
   const items=(p.items||[]).map((it,k)=>({...it,cantidad:ed[k]!==undefined?ed[k]:it.cantidad})).filter(it=>it.cantidad>0);
   if(!items.length){showToast('⚠️ El pedido quedó vacío. Recházalo si no se envía.');return;}
   const eliminados=(p.items||[]).filter((it,k)=>ed[k]===0).map(it=>({producto_id:it.producto_id,producto_nombre:it.producto_nombre,cantidad_pedida:it.cantidad,unidad_medida:it.unidad_medida}));
-  try{const {id:_i,...base}=p;                                   // recién ahora pasa a pedidos_locales (lo que lee Facility EC)
-    await setDoc(doc(db,'pedidos_locales',id),{...base,items,eliminados,estado:'enviado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()});
+  try{const {id:_i,...base}=p;
+    const esProv=it=>sinAc(it.seccion||secItem(it))==='proveedores',itFac=items.filter(it=>!esProv(it)),itProv=items.filter(esProv);
+    if(itFac.length)await setDoc(doc(db,'pedidos_locales',id),{...base,items:itFac,eliminados,estado:'enviado',aprobado_por:APROBADOR,fecha_aprobacion:serverTimestamp()});   // lo que lee Facility EC (sin Proveedores)
+    if(itProv.length)await setDoc(doc(db,'pedir_proveedores',id),{local:base.local,numero:base.numero||null,estacion:base.estacion||'',estado:'por_pedir',aprobado_por:APROBADOR,fecha_ms:Date.now(),
+      items:itProv.map(it=>({producto_id:it.producto_id,producto_nombre:it.producto_nombre,unidad_medida:it.unidad_medida||'',categoria:it.categoria||'',seccion:it.seccion||'',cantidad:it.cantidad,proveedor:'',enviado:false}))});   // Proveedores → Pedidos › Proveedores › Por pedir
     await deleteDoc(doc(db,'pedidos_revision',id)).catch(e=>console.warn('revision',e));
-    const pv={};items.filter(it=>sinAc(it.seccion||secItem(it))==='proveedores').forEach(it=>{const k=it.categoria||'general';(pv[k]=pv[k]||[]).push(it);});
-    await Promise.all(Object.entries(pv).map(([k,l])=>setDoc(doc(collection(db,'recepciones_bodega')),provDoc(k,l,p.numero)).catch(e=>console.error('por_recibir',e))));
-    delete revEdit[id];revSel=null;beep(988,.15);vib(40);showToast('✅ Pedido enviado a Facility');
+    delete revEdit[id];revSel=null;beep(988,.15);vib(40);showToast(itFac.length&&itProv.length?'✅ Enviado a Facility · Proveedores quedó en «Por pedir»':itProv.length?'✅ Proveedores quedó en «Por pedir»':'✅ Pedido enviado a Facility');
     if(!pedMios.some(x=>x.id!==id&&x.estado==='por_aprobar'))ovCerrar();else renderOv();}
   catch(e){console.error(e);showToast(errPed(e));}
 }
@@ -3664,7 +3664,7 @@ async function simDespachar(id){
   const p=pedMios.find(x=>x.id===id);if(!TEST||!p)return;
   const ref=doc(collection(db,'pedidos')),aj=p.ajustes||{};
   await setDoc(ref,{local:p.local,estado:'despachado',pedido_local_id:id,numero:p.numero||null,estacion:p.estacion||'',despachado_por:'Facility (simulado)',fecha_despacho:serverTimestamp(),
-    items:(p.items||[]).filter(i=>sinAc(i.seccion||secItem(i))!=='proveedores').map(i=>{const c=aj[i.producto_id]!==undefined&&aj[i.producto_id]!==null?aj[i.producto_id]:i.cantidad;return {...i,cantidad_pedida:i.cantidad,cantidad_despachada:c};}).filter(i=>i.cantidad_despachada>0)});
+    items:(p.items||[]).map(i=>{const c=aj[i.producto_id]!==undefined&&aj[i.producto_id]!==null?aj[i.producto_id]:i.cantidad;return {...i,cantidad_pedida:i.cantidad,cantidad_despachada:c};}).filter(i=>i.cantidad_despachada>0)});
   await setDoc(doc(db,'pedidos_locales',id),{estado:'procesado',despacho_id:ref.id},{merge:true});
   beep(660,.15);vib(40);showToast('📦 Facility despachó el pedido (simulado). Ya aparece en «Por recibir».');
 }
@@ -4616,7 +4616,8 @@ const RX_A={
   SV:()=>serverTimestamp(),
   INC:n=>increment(n),
   empleados:()=>encargadosDeLocal(dispositivo.local),
-  items:()=>{   // solo lo que está en la categoría «Proveedores» de la lista de Pedido (se actualiza solo al cambiar esa lista)
+  docProv:(prov,items,pnum,area)=>provDoc(area,items,pnum,prov),
+  items:()=>{   // solo lo que está en la categoría «Proveedores» de la lista (se actualiza solo al cambiar esa lista)
     const base=CAT_TODOS.filter(p=>!p.oculto&&sinAc(p.seccion)==='proveedores').map(p=>({id:p.id,nombre:p.nombre,unidad:unidadDe(p),uCompra:unidadDe(p),cons:'ambiente'}));
     return base.sort((a,b)=>a.nombre.localeCompare(b.nombre));
   },
@@ -4656,7 +4657,7 @@ const MOT_ANUL = ['Error de captura', 'Duplicada', 'Mercadería devuelta', 'Otro
 const PASOS = ['Proveedor', 'Productos', 'Comprobante', 'Confirmar'];
 const COLD = {refrigerado:{max:5, txt:'Refrigerado: hasta 5 °C'}, congelado:{max:-12, txt:'Congelado: −12 °C o menos'}};
 
-const R = {tab:'prec', admHasta:0, nw:{}, old:{}, provs:[], d:null, id:null, step:1, q:'', fq:'', filtro:'todas', det:null, m:null, busy:false, ready:false, foto:{}, resp:LSg('resp', ''), respOtro:false, pend:null, delOk:null, t:null};
+const R = {vista:'rx', pp:[], ppN:0, tab:'prec', admHasta:0, nw:{}, old:{}, provs:[], d:null, id:null, step:1, q:'', fq:'', filtro:'todas', det:null, m:null, busy:false, ready:false, foto:{}, resp:LSg('resp', ''), respOtro:false, pend:null, delOk:null, t:null};
 const cat = () => A.items();
 const catPor = id => cat().filter(x => x.id === id)[0] || null;
 const mail = () => null;
@@ -4677,9 +4678,11 @@ function escuchar(){
   db.collection('recepciones_bodega').orderBy('fecha', 'desc').limit(60).onSnapshot(snap => {
     R.old = {}; snap.forEach(d => { const x = d.data({serverTimestamps:'estimate'}); if(!x.modulo && (x.local === A.local())) R.old[d.id] = Object.assign({}, x, {id:d.id, anterior:true}); }); refrescar();
   }, e => console.error(e));
+  db.collection('pedir_proveedores').onSnapshot(snap => { R.pp = []; snap.forEach(d => { const x = d.data(); if(x.local === A.local()) R.pp.push(Object.assign({id:d.id}, x)); }); R.pp.sort((a, b) => (b.fecha_ms || 0) - (a.fecha_ms || 0)); refrescar(); }, e => console.error(e));
   db.collection('proveedores').onSnapshot(snap => { R.provs = []; snap.forEach(d => R.provs.push(Object.assign({id:d.id}, d.data()))); R.provs.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''))); refrescar(); }, e => console.error(e));
 }
-function badge(){ try { A.badge(borradores().length + porRecibir().length); } catch(e){} }
+const ppPend = () => R.pp.filter(x => x.estado !== 'enviado');
+function badge(){ try { R.ppN = ppPend().length; A.badge(borradores().length + porRecibir().length + R.ppN); } catch(e){} }
 let rt = null;
 function refrescar(){
   badge();
@@ -4773,6 +4776,7 @@ function tabs(){
 function render(){
   const r = $('#rx-root'); if(!r) return;
   let h;
+  if(R.vista === 'lista' && !R.d && !R.det){ if(R.tab === 'hist') PL.sub = 'hist'; else if(PL.sub === 'hist') PL.sub = 'recibir'; r.innerHTML = vLista(); const f = r.querySelector('[data-focus]'); if(f && !R.noFocus){ try { f.focus(); const v = f.value; f.setSelectionRange(v.length, v.length); } catch(e){} } R.noFocus = false; return; }
   if(R.tab === 'nueva' && !rxAdm() && !R.d) R.tab = 'prec';   // «Nueva» solo con código
   if(R.d) h = vFlujo();
   else if(R.det) h = vDetalle();
@@ -4780,6 +4784,108 @@ function render(){
   r.innerHTML = h;
   const a = r.querySelector('[data-focus]'); if(a && !R.noFocus){ try { a.focus(); const v = a.value; a.setSelectionRange(v.length, v.length); } catch(e){} }
   R.noFocus = false;
+}
+
+
+/* ---- Proveedores: registrar proveedores (actuales y futuros) y los productos que nos proveen ---- */
+const PL = {sub:'pedir', pp:null, sel:null, q:'', pick:false, pq:''};
+const plProv = id => R.provs.filter(p => p.id === id)[0];
+const plProds = p => Array.isArray(p && p.productos_lista) ? p.productos_lista : [];
+function plGate(cb){ if(rxAdm()) cb(); else A.codigo(() => { R.admHasta = Date.now() + 10 * 60000; cb(); }); }
+function plGuardarProds(id, lista){ db.collection('proveedores').doc(id).set({productos_lista:lista}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }
+function vLista(){
+  const nr = porRecibir().length + borradores().length, np = ppPend().length;
+  const sub = [['pedir', 'Por pedir' + (np ? ' <i>' + np + '</i>' : '')], ['recibir', 'Por recibir' + (nr ? ' <i>' + nr + '</i>' : '')], ['hist', 'Historial'], ['lista', 'Lista']];
+  const bar = '<div class="rx-tabs">' + sub.map(t => '<button class="rx-tab ' + (PL.sub === t[0] ? 'on' : '') + '" data-rx="pl-sub" data-v="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
+  return bar + (PL.sub === 'pedir' ? vPedir() : PL.sub === 'recibir' ? vPrec() + '<button class="rx-b" data-rx="nuevo" style="margin-top:14px">＋ Recepción sin pedido 🔒</button>' : PL.sub === 'hist' ? vHist() : vProvs());
+}
+/* ---- Por pedir: lo que llegó de la lista aprobada (categoría Proveedores). Eliges proveedor y lo mandas por WhatsApp ---- */
+const ppProvDe = it => it.proveedor || ((R.provs.filter(p => plProds(p).some(x => x.id === it.producto_id))[0]) || {}).nombre || '';
+function vPedir(){
+  const d = PL.pp && R.pp.filter(x => x.id === PL.pp)[0];
+  if(d && d.estado !== 'enviado') return vPedirDet(d);
+  PL.pp = null;
+  const l = ppPend();
+  if(!l.length) return '<div class="rx-vacio">No hay nada por pedir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando el encargado aprueba la lista.</span></div>';
+  return '<div class="rx-list">' + l.map(r => { const n = (r.items || []).filter(i => !i.enviado).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' por pedir</div><div class="rx-mu">' + (r.items || []).filter(i => !i.enviado).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
+}
+function vPedirDet(d){
+  const items = d.items || [], nombres = R.provs.map(p => p.nombre), grupos = {};
+  let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pp-back">← Por pedir</button><div class="rx-tt">' + (d.numero ? '#' + esc(d.numero) + ' · ' : '') + esc(d.estacion || 'Lista') + '</div><span></span></div>';
+  h += '<div class="rx-card"><h3>¿A quién se lo pides?</h3>' + (nombres.length ? '' : '<div class="rx-mu">Primero registra tus proveedores en la pestaña «Lista».</div>') +
+    items.map((it, k) => {
+      if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
+      const pr = ppProvDe(it); if(pr) (grupos[pr] = grupos[pr] || []).push(k);
+      return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><div><b>' + esc(it.producto_nombre) + '</b> <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></div>' +
+        '<select class="rx-in" data-pp="' + k + '" style="margin-top:4px"><option value="">Elegir proveedor…</option>' + nombres.map(n => '<option value="' + esc(n) + '"' + (n === pr ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select></div>';
+    }).join('') + '</div>';
+  Object.keys(grupos).forEach(pr => {
+    h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map(k => '<div class="rx-mu">• ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
+      '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">💬 Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>';
+  });
+  return h;
+}
+function ppTel(nombre){
+  const pv = R.provs.filter(p => norm(p.nombre) === norm(nombre))[0]; let t = String((pv && pv.telefono) || '').replace(/\D/g, '');
+  if(!t) return ''; if(t.indexOf('593') === 0) return t; if(t.charAt(0) === '0') return '593' + t.slice(1); return t.length <= 9 ? '593' + t : t;
+}
+function ppSet(d, k, v){
+  d.items[k].proveedor = v; db.collection('pedir_proveedores').doc(d.id).set({items:d.items}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); render();
+}
+function ppEnviar(d, prov, wa){
+  const idx = []; (d.items || []).forEach((it, k) => { if(!it.enviado && ppProvDe(it) === prov) idx.push(k); }); if(!idx.length) return;
+  const its = idx.map(k => d.items[k]);
+  if(wa){
+    const lineas = its.map(it => '• ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
+    const msg = 'Hola ' + prov + ', buen día. Pedido de Morochos ' + A.localNombre() + ':\n' + lineas + '\n\nGracias.';
+    window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
+  }
+  const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion);
+  db.collection('recepciones_bodega').doc('pp_' + d.id + '_' + slug(prov) + '_' + Date.now()).set(rec).catch(er => { console.error(er); toast(errTxt(er)); });
+  idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; });
+  const todo = d.items.every(i => i.enviado); d.estado = todo ? 'enviado' : 'por_pedir';
+  db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
+  toast('✅ Pedido a ' + prov + ' registrado · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
+}
+function vProvs(){
+  const pv = PL.sel && plProv(PL.sel);
+  if(pv){
+    const pr = plProds(pv), ya = pr.map(x => x.id);
+    let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pl-back">← Proveedores</button><div class="rx-tt">' + esc(pv.nombre) + '</div><span></span></div>';
+    h += '<div class="rx-card"><h3>WhatsApp del proveedor</h3><input class="rx-in" id="pl-tel" type="tel" inputmode="tel" placeholder="Ej. 0991234567" autocomplete="off" value="' + esc(pv.telefono || '') + '"><div class="rx-mu">Con este número se abre el WhatsApp al pedir.</div></div>';
+    h += '<div class="rx-card"><h3>Productos que nos provee <span class="rx-mu">(' + pr.length + ')</span></h3>' +
+      (pr.length ? pr.map((x, k) => '<div class="rx-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee"><span>' + esc(x.nombre) + ' <small class="rx-mu">' + esc(x.unidad || '') + '</small></span><button class="rx-b sm" data-rx="pl-pdel" data-i="' + k + '">✕</button></div>').join('') : '<div class="rx-mu c">Aún no hay productos. Agrega los que te vende este proveedor.</div>') + '</div>';
+    if(PL.pick){
+      const q = norm(PL.pq), lst = cat().filter(it => !q || norm(it.nombre).indexOf(q) >= 0).slice(0, 40);
+      const exacto = q && (cat().some(it => norm(it.nombre) === q) || pr.some(x => norm(x.nombre) === q));
+      h += '<div class="rx-card"><h3>Agregar productos</h3><input class="rx-in" id="pl-pq" data-focus placeholder="Buscar producto o escribir uno nuevo…" autocomplete="off" value="' + esc(PL.pq) + '">' +
+        (PL.pq.trim() && !exacto ? '<button class="rx-b ac" data-rx="pl-pnew" style="margin-top:8px">＋ Agregar «' + esc(PL.pq.trim()) + '» como producto nuevo</button>' : '') +
+        '<div class="rx-pl" style="margin-top:8px">' + (lst.length ? lst.map(it => '<button class="rx-pi ' + (ya.indexOf(it.id) >= 0 ? 'hecho' : '') + '" data-rx="pl-ppick" data-id="' + esc(it.id) + '"><span>' + esc(it.nombre) + ' <small>' + esc(it.uCompra || it.uAlmacen || it.unidad || '') + '</small></span>' + (ya.indexOf(it.id) >= 0 ? '<b>✓</b>' : '') + '</button>').join('') : '<div class="rx-mu">Sin resultados.</div>') + '</div>' +
+        '<button class="rx-b ok big" data-rx="pl-pfin" style="margin-top:10px">Listo</button></div>';
+    } else h += '<button class="rx-b ok big" data-rx="pl-padd">＋ Agregar productos</button>';
+    h += '<button class="rx-b" data-rx="pl-del" style="margin-top:14px">🗑 Eliminar proveedor</button>';
+    return h;
+  }
+  PL.sel = null;
+  const q = norm(PL.q), l = R.provs.filter(p => !q || norm(p.nombre).indexOf(q) >= 0), exacto = q && R.provs.some(p => norm(p.nombre) === q);
+  return '<div class="rx-card"><h3>Proveedores</h3><div class="rx-mu">Registra aquí tus proveedores y los productos que te venden. Al recibir mercadería los verás ya listos.</div>' +
+    '<input class="rx-in" id="pl-q" data-focus placeholder="Buscar o escribir un proveedor nuevo…" autocomplete="off" value="' + esc(PL.q) + '" style="margin-top:8px">' +
+    (PL.q.trim() && !exacto ? '<button class="rx-b ac" data-rx="pl-add" style="margin-top:8px">＋ Agregar «' + esc(PL.q.trim()) + '» como proveedor</button>' : '') + '</div>' +
+    '<div class="rx-list">' + (l.length ? l.map(p => '<div class="rx-row"><button class="rx-rb" data-rx="pl-open" data-id="' + esc(p.id) + '"><b>' + esc(p.nombre) + '</b><div class="rx-mu">' + plProds(p).length + ' producto' + (plProds(p).length === 1 ? '' : 's') + '</div></button></div>').join('') : '<div class="rx-mu c">' + (R.provs.length ? 'Sin resultados.' : 'Todavía no hay proveedores. Escribe el nombre arriba y agrégalo.') + '</div>') + '</div>';
+}
+function plEvento(a, id, i){
+  const pv = PL.sel && plProv(PL.sel);
+  switch(a){
+    case 'pl-open': PL.sel = id; PL.pick = false; PL.pq = ''; render(); window.scrollTo(0, 0); break;
+    case 'pl-back': PL.sel = null; PL.pick = false; render(); break;
+    case 'pl-add': { const nom = PL.q.trim(); if(!nom) break; plGate(() => { const pid = 'prov_' + slug(nom); db.collection('proveedores').doc(pid).set({nombre:nom, telefono:'', productos:'', productos_lista:[], creado:SV()}, {merge:true}).then(() => toast('Proveedor agregado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); if(!plProv(pid)) R.provs.push({id:pid, nombre:nom, telefono:'', productos:'', productos_lista:[]}); PL.q = ''; PL.sel = pid; PL.pick = true; PL.pq = ''; render(); }); break; }
+    case 'pl-padd': PL.pick = true; PL.pq = ''; render(); break;
+    case 'pl-pfin': PL.pick = false; PL.pq = ''; render(); break;
+    case 'pl-ppick': if(!pv) break; plGate(() => { const it = cat().filter(x => x.id === id)[0]; if(!it) return; const l = plProds(pv).slice(), k = l.findIndex(x => x.id === id); if(k >= 0) l.splice(k, 1); else l.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); render(); }); break;
+    case 'pl-pnew': { if(!pv) break; const nom = PL.pq.trim(); if(!nom) break; plGate(() => { const l = plProds(pv).slice(); if(!l.some(x => norm(x.nombre) === norm(nom))) l.push({id:'n_' + slug(nom), nombre:nom, unidad:'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); PL.pq = ''; render(); }); break; }
+    case 'pl-pdel': if(!pv) break; plGate(() => { const l = plProds(pv).slice(); l.splice(i, 1); pv.productos_lista = l; plGuardarProds(pv.id, l); render(); }); break;
+    case 'pl-del': if(!pv) break; plGate(() => { if(!confirm('¿Eliminar a ' + pv.nombre + '? Las recepciones ya hechas no se borran.')) return; db.collection('proveedores').doc(pv.id).delete().then(() => toast('Proveedor eliminado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); PL.sel = null; render(); }); break;
+  }
 }
 
 /* ---- Nueva: elegir proveedor (paso 1 del flujo) ---- */
@@ -4874,14 +4980,14 @@ function vPend(){
 function vPrec(){
   const l = porRecibir();
   if(!l.length && borradores().length) return vPend();
-  if(!l.length) return '<div class="rx-vacio">No hay listas por recibir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando el encargado aprueba el pedido.</span></div>';
-  return '<div class="rx-list">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div><div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px;display:block;text-align:center">Recibir ›</span></button>' +
+  if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
+  return '<div class="rx-list">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div><div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px;display:block;text-align:center">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
     '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div class="rx-mu" style="margin:14px 2px 6px;font-weight:700">En curso (sin terminar)</div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
   const r = R.nw[id]; if(!r) return;
   R.id = id; R.d = JSON.parse(JSON.stringify(r)); delete R.d.id; delete R.d.fecha_actividad; delete R.d.fecha_creacion; delete R.d.paso;
-  R.d.estado = 'borrador'; R.d.fecha_creacion = true; R.d.historial = (R.d.historial || []).concat([hist('abierta desde Por recibir')]);
+  R.d.fecha_creacion = true; R.d.historial = (R.d.historial || []).concat([hist('abierta desde Por recibir')]);   // sigue como «por_recibir» hasta confirmar: si no la terminas, se queda en su lugar
   R.step = 1; R.tab = 'nueva'; R.q = ''; guardar(true); render(); window.scrollTo(0, 0);
 }
 
@@ -4918,7 +5024,8 @@ function vDetalle(){
 /* ---------- productos: buscar, frecuentes, nuevo provisional ---------- */
 function frecuentesDe(prov){
   const c = {}; todas().forEach(r => { if(r.id === R.id || String(r.proveedor || '').trim() !== prov || estadoDe(r) === 'anulada') return; (r.items || []).forEach(i => { const id = i.producto_id; if(id && !i.provisional) c[id] = {n:((c[id] || {}).n || 0) + 1, nombre:i.nombre || i.producto_nombre, unidad:i.unidad || i.unidad_medida}; }); });
-  return Object.keys(c).sort((a, b) => c[b].n - c[a].n).slice(0, 8).map(id => ({id:id, nombre:c[id].nombre, unidad:c[id].unidad}));
+  const reg = plProds(R.provs.filter(p => norm(p.nombre) === norm(prov))[0]), regIds = reg.map(x => x.id);
+  return reg.concat(Object.keys(c).filter(id => regIds.indexOf(id) < 0).sort((a, b) => c[b].n - c[a].n).slice(0, 8).map(id => ({id:id, nombre:c[id].nombre, unidad:c[id].unidad})));
 }
 function agregarItem(o){
   const d = R.d; if(!d) return false;
@@ -5033,7 +5140,7 @@ async function confirmar(){
   try {
     await db.runTransaction(async t => {
       const rr = db.collection('recepciones_bodega').doc(id), s = await t.get(rr), cur = s.exists ? s.data() : null;
-      if(cur && (cur.estado !== 'borrador' || cur.entradas_generadas)) throw new Error('DUP');
+      if(cur && ((cur.estado !== 'borrador' && cur.estado !== 'por_recibir') || cur.entradas_generadas)) throw new Error('DUP');
       const ts = SV();
       items.forEach(i => { if(i.entrada_generada) aInv(t, id, i, d, ts); });
       t.set(rr, Object.assign({}, d, {estado:'confirmada', items:items, responsable:R.resp, entradas_generadas:true, pendiente_vinculacion:sinVinc, resultado:hayDif ? 'con_diferencias' : 'completa', proveedor_id:d.proveedor_id || null,
@@ -5127,6 +5234,11 @@ function onClick(e){
     case 'adm-on': A.codigo(() => { R.admHasta = Date.now() + 10 * 60000; render(); toast('🔓 Modo con código: 10 minutos'); }); break;
     case 'adm-off': R.admHasta = 0; if(R.tab === 'nueva' && !R.d) R.tab = 'prec'; render(); toast('🔒 Modo con código cerrado'); break;
     case 'nuevo': { const go = () => { nuevoBorrador(); render(); window.scrollTo(0, 0); }; if(rxAdm()) go(); else A.codigo(go); break; }
+    case 'pl-sub': PL.sub = v; R.tab = v === 'hist' ? 'hist' : 'prec'; PL.pp = null; PL.sel = null; PL.pick = false; render(); window.scrollTo(0, 0); break;
+    case 'pp-open': PL.pp = id; render(); window.scrollTo(0, 0); break;
+    case 'pp-back': PL.pp = null; render(); break;
+    case 'pp-wa': case 'pp-ok': { const dd = R.pp.filter(x => x.id === PL.pp)[0]; if(dd) ppEnviar(dd, v, a === 'pp-wa'); break; }
+    case 'pl-open': case 'pl-back': case 'pl-add': case 'pl-padd': case 'pl-pfin': case 'pl-ppick': case 'pl-pnew': case 'pl-pdel': case 'pl-del': plEvento(a, id, i); break;
     case 'salir': salir(); break;
     case 'step': if(d){ if(n > R.step && !paso1ok(n)) break; R.step = n; guardar(); render(); window.scrollTo(0, 0); } break;
     case 'atras': R.step = Math.max(1, R.step - 1); guardar(); render(); window.scrollTo(0, 0); break;
@@ -5189,6 +5301,8 @@ document.addEventListener('input', e => {
   const t = e.target; if(!t || !t.id) return;
   if(t.id === 'rx-q'){ R.q = t.value; if(R.d && R.step === 1){ const ps = $('#rx-root .rx-card'); R.noFocus = false; render(); } }
   else if(t.id === 'rx-hq'){ R.fq = t.value; render(); }
+  else if(t.id === 'pl-q'){ PL.q = t.value; render(); }
+  else if(t.id === 'pl-pq'){ PL.pq = t.value; render(); }
   else if(t.id === 'rx-doc' && R.d){ R.d.documento = t.value.trim(); guardar(); }
   else if(t.id === 'rx-obs' && R.d){ R.d.observaciones = t.value.trim(); guardar(); }
   else if(t.id === 'rx-resp' && R.d){ R.resp = t.value.trim(); R.d.responsable = R.resp; }
@@ -5196,8 +5310,12 @@ document.addEventListener('input', e => {
   else if(t.id === 'rx-vq' && R.m && R.m.k === 'vinc'){ R.m.q = t.value; renderVinc(); }
   else if(t.id === 'rx-pn' && R.m && R.m.nuevo){ R.m.nuevo.nombre = t.value; }
 });
-document.addEventListener('change', e => { const i = e.target; if(i && (i.id === 'rx-foto-cam' || i.id === 'rx-foto-img') && i.files && i.files[0] && R.d){ leerFoto(i.files[0]); i.value = ''; } });
+document.addEventListener('change', e => { const x = e.target;
+  if(x && x.id === 'pl-tel' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val !== (pv.telefono || '')) plGate(() => { pv.telefono = val; db.collection('proveedores').doc(pv.id).set({telefono:val}, {merge:true}).then(() => toast('Número guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }); return; }
+  if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(dd) ppSet(dd, +x.getAttribute('data-pp'), x.value); return; }
+  const i = x; if(i && (i.id === 'rx-foto-cam' || i.id === 'rx-foto-img') && i.files && i.files[0] && R.d){ leerFoto(i.files[0]); i.value = ''; } });
 
+window.rxVista = function(v){ R.vista = v === 'lista' ? 'lista' : 'rx'; if(R.vista === 'lista'){ PL.sel = null; PL.pick = false; } escuchar(); R.det = null; render(); };
 window.rxView = function(n){ if(n === 'recepcion'){ escuchar(); R.det = null; render(); } };
 window.rxIniciar = function(){ R.ready = false; try { Object.keys(R.nw).forEach(k => delete R.nw[k]); } catch(e){} escuchar(); badge(); };
 window.rxRefresh = refrescar;
@@ -5250,15 +5368,16 @@ let REC_SUB='fac',_rxN=0;
 function recBadges(){
   const g=(typeof GUIAS!=='undefined'&&GUIAS)?GUIAS.length:0,t=g+_rxN,b=document.getElementById('tab-recepcion');
   if(b){if(t)b.dataset.n=t;else delete b.dataset.n;}
-  const f=document.getElementById('rcx-n-fac'),p=document.getElementById('rcx-n-prov');
-  if(f)f.textContent=g||'';if(p)p.textContent=_rxN||'';
+  const f=document.getElementById('rcx-n-fac'),p=document.getElementById('rcx-n-prov'),l=document.getElementById('rcx-n-lista'),pp=(window.RXS&&window.RXS.ppN)||0;
+  if(f)f.textContent=g||'';if(p)p.textContent='';if(l)l.textContent=_rxN||'';
 }
+window._recSyncSub=s=>{REC_SUB=s;document.getElementById('rcx-fac').style.display=s==='fac'?'block':'none';document.getElementById('rcx-prov').style.display=s!=='fac'?'block':'none';document.querySelectorAll('#rcx-sw button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));if(window.RXS&&s==='prov')window.RXS.vista='rx';};
 function recSub(s){
-  REC_SUB=s==='prov'?'prov':'fac';
+  REC_SUB=s==='fac'?'fac':'lista';
   document.getElementById('rcx-fac').style.display=REC_SUB==='fac'?'block':'none';
-  document.getElementById('rcx-prov').style.display=REC_SUB==='prov'?'block':'none';
+  document.getElementById('rcx-prov').style.display=REC_SUB==='lista'?'block':'none';
   document.querySelectorAll('#rcx-sw button').forEach(b=>b.classList.toggle('on',b.dataset.s===REC_SUB));
-  if(REC_SUB==='fac')setTimeout(renderRec,30);else window.rxView&&window.rxView('recepcion');
+  if(REC_SUB==='fac')setTimeout(renderRec,30);else if(window.rxVista)window.rxVista(REC_SUB);
   window.scrollTo(0,0);
 }
 document.getElementById('rcx-sw').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;vib(10);recSub(b.dataset.s);});
