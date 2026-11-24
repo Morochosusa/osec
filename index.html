@@ -661,6 +661,7 @@
   .rx-row{display:flex;gap:6px;align-items:stretch}
   .rx-rb,.rx-hr{flex:1;text-align:left;background:#fff;border:1px solid #e0ded6;border-radius:14px;padding:12px;cursor:pointer;font-size:15px;color:#1f1f1d;min-height:60px}
   .rx-hr{width:100%} .rx-hr.anul{opacity:.65}
+  #rx-root .rx-list.rx-uno{display:flex;flex-direction:column;grid-template-columns:none;gap:8px}   /* Historial: una sola columna */
   .rx-hh{display:flex;justify-content:space-between;gap:6px} .rx-bd{margin-top:4px}
   .rx-vacio{text-align:center;color:#6b6a64;padding:40px 10px}
   #rx-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150;align-items:center;justify-content:center;padding:12px}
@@ -1369,7 +1370,7 @@ const pad = n => (n < 10 ? '0' : '') + n;
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const sinAc = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const slug = t => sinAc(t).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-const dtf = new Intl.DateTimeFormat('es', {weekday:'short', day:'numeric', month:'short'}), tf = new Intl.DateTimeFormat('es', {hour:'2-digit', minute:'2-digit', hour12:false});
+const dtf = new Intl.DateTimeFormat('es', {weekday:'short', day:'numeric', month:'short'}), tf = new Intl.DateTimeFormat('es', {hour:'numeric', minute:'2-digit', hour12:true});
 const fd = (d, conHora) => { const s = dtf.format(d).replace(/\./g, ''); return conHora ? s + ' ' + tf.format(d) : s; };
 const sameDay = ms => new Date(ms).toDateString() === new Date().toDateString();
 const getHoy = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
@@ -1650,7 +1651,7 @@ const UCFG0 = {lenguaje:'ZPL', ancho_mm:ETIQUETA.ancho_mm, alto_mm:ETIQUETA.alto
 const U = {dev:null, itf:null, ep:null, estado:'off', msg:'', cfg:Object.assign({}, UCFG0, LSget('usb_cfg', {})), cola:Promise.resolve()};
 const lbDIAS = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'], lbMESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const lbLimpiar = t => String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\^~\\"]/g, '').replace(/[^\x20-\x7E]/g, '?').trim();
-const lbFecha = (ms, hora) => { const d = new Date(ms); return lbDIAS[d.getDay()] + ' ' + d.getDate() + ' ' + lbMESES[d.getMonth()] + (hora ? ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : ''); };
+const lbFecha = (ms, hora) => { const d = new Date(ms); return lbDIAS[d.getDay()] + ' ' + d.getDate() + ' ' + lbMESES[d.getMonth()] + (hora ? ' ' + ((d.getHours() % 12 || 12) + ':' + pad(d.getMinutes()) + (d.getHours() < 12 ? ' a. m.' : ' p. m.')) : ''); };
 const lbNum = n => String(Math.round(Number(n) * 100) / 100).replace('.', ',');
 const lbDeReg = r => ({tipo:'etiqueta', producto:r.nombre, presentacion:r.presentacion || '', precio:r.precio || 0, cantidad:qEtq(r), unidad:r.unidad, elaboradoMs:r.ts, venceMs:r.vence, dias:r.dias, conservacion:MODOS[r.modo] || '', lote:r.lote, operador:r.op, copias:r.etq, prueba:!!r.prueba});
 function lbDatos(j){
@@ -2471,7 +2472,7 @@ async function ckUltimoRegistro(emp){
     const ms=r=>r.fecha?.toMillis?r.fecha.toMillis():0;
     const u=snap.docs.map(d=>d.data()).sort((a,b)=>ms(b)-ms(a))[0];
     const fecha=u.fecha?.toDate?u.fecha.toDate():new Date();
-    const hora=fecha.toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
+    const hora=fecha.toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',hour12:true});
     const dia=fecha.toDateString()===new Date().toDateString()?'':' · '+fecha.toLocaleDateString('es-EC',{day:'numeric',month:'short'});
     el.textContent=(u.tipo==='entrada'?'✅ Última entrada':'🚪 Última salida')+' · '+hora+dia;
   }catch(e){console.error(e);}
@@ -3559,7 +3560,7 @@ function pedBorrar(id){
   });
 }
 const ESTADO_PED={por_aprobar:['Esperando revisión','wn'],rechazado:['Rechazado','er'],enviado:['Enviado a Facility','wn'],en_proceso:['En proceso','ac'],procesado:['Listo (despachado / en compras)','ok']};
-function fechaTxt(ts){try{const d=ts?.toDate?ts.toDate():new Date();return d.toLocaleString('es-EC',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function fechaTxt(ts){try{const d=ts?.toDate?ts.toDate():new Date();return d.toLocaleString('es-EC',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});}catch(e){return '';}}
 // Los pedidos enviados y los pedidos por revisar se abren en una ventana aparte (listas largas, con scroll propio)
 const APROBADOR='Erika Tepan';   // quien revisa y aprueba los pedidos
 let ovModo='',revSel=null,revEdit={};
@@ -3737,7 +3738,7 @@ async function recAceptar(){
         // materia prima de panadería: la misma recepción alimenta ese inventario (id fijo = no se duplica)
         const mpx=(typeof mpDe==='function')?mpDe(p,a.it.producto_nombre):null;
         if(mpx){const mid=`rec__${g.id}__${mpx._id}`;mpIds.push(mid);
-          tx.set(doc(db,'pan_mp_mov',mid),{id:mid,local:code,local_nombre:dispositivo.local,dia:getHoy(),ts:Date.now(),fecha:serverTimestamp(),hora:new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'}),tipo:'entrada_recepcion',mp_id:mpx._id,nombre:mpx.nombre,codigo:mpx.codigo||'',unidad:mpx.unidad||'',unidad_recibida:a.it.unidad_medida||'',cantidad:a.sum,guia_id:g.id,por:quien,anulado:false,receta_id:null,producto_destino_id:null});}
+          tx.set(doc(db,'pan_mp_mov',mid),{id:mid,local:code,local_nombre:dispositivo.local,dia:getHoy(),ts:Date.now(),fecha:serverTimestamp(),hora:new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',hour12:true}),tipo:'entrada_recepcion',mp_id:mpx._id,nombre:mpx.nombre,codigo:mpx.codigo||'',unidad:mpx.unidad||'',unidad_recibida:a.it.unidad_medida||'',cantidad:a.sum,guia_id:g.id,por:quien,anulado:false,receta_id:null,producto_destino_id:null});}
         // inventario general de la estación (área) a la que pertenece el producto
         const actE=snapsE[k].exists()?(snapsE[k].data().cantidad||0):0;
         tx.set(doc(db,'inventario_estacion',`${code}__${a.ek}__${p}`),{local:code,estacion:areaNombre(a.ek),estacion_key:a.ek,producto_id:p,producto_nombre:a.it.producto_nombre,unidad_medida:a.it.unidad_medida||'',categoria:a.ek,cantidad:r2(actE+a.sum),actualizado:serverTimestamp()},{merge:true});
@@ -4084,7 +4085,7 @@ const PAN_AREA='Panadería producción';
 const panCode=()=>LOCAL_CODE[dispositivo.local];
 const panNorm=s=>sinAc(String(s||'')).replace(/\(.*?\)/g,'').replace(/\s+/g,' ').trim();
 const panSum=(arr,f,g)=>r2(arr.filter(f).reduce((s,x)=>s+(Number(g(x))||0),0));
-const panHora=()=>new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
+const panHora=()=>new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',hour12:true});
 const panProds=()=>(window.PRODREG?PRODREG.productos(PAN_AREA):[]);
 const panDiaAtras=n=>{const d=new Date(Date.now()-n*864e5);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const PAN_MAN=['Erika Tepan','Joselinn Chichilima','Eimy Chico'];
@@ -4133,7 +4134,7 @@ const mpCant=m=>panSum(PAN.d.mpmov,x=>x.mp_id===m._id&&!x.anulado,x=>x.cantidad)
 const mpUlt=m=>PAN.d.mpmov.filter(x=>x.mp_id===m._id&&!x.anulado).reduce((t,x)=>Math.max(t,x.ts||0),0);
 function mpEstado(m){const c=mpCant(m),mi=Number(m.minimo)||0;return c<=0?['Agotado','er']:(mi>0&&c<=mi?['Bajo stock','wn']:['Disponible','ok']);}
 const mpDe=(pid,nombre)=>mpActivos().find(m=>(m.producto_id&&m.producto_id===pid)||panNorm(m.nombre)===panNorm(nombre));
-const fHoraDia=ts=>{try{return new Date(ts).toLocaleString('es-EC',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
+const fHoraDia=ts=>{try{return new Date(ts).toLocaleString('es-EC',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});}catch(e){return '';}};
 const MP_BASE=[['Harina de trigo','kg'],['Azúcar','kg'],['Huevos','unidades'],['Queso','kg'],['Levadura','kg'],['Mantequilla','kg']];
 // ── vistas ──
 function renderPan(){
@@ -4648,7 +4649,8 @@ const slug = s => norm(s).replace(/ /g, '_').slice(0, 40) || 'x';
 const UNI_ENTERA = u => /unid|uds|und|funda|paquete|caja|cubeta|saco|botella|lata|porci|orden|pieza|gaveta|bandeja|atado|docena|rollo|quintal/i.test(String(u || ''));
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const fechaDia = t => { const m = ms(t); if(!m) return 'Guardando…'; const d = new Date(m); const w = DIAS[d.getDay()]; return w.charAt(0).toUpperCase() + w.slice(1) + ' ' + d.getDate() + ' ' + MESES[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const h12 = d => { const h = d.getHours(); return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + (h < 12 ? 'a. m.' : 'p. m.'); };
+const fechaDia = t => { const m = ms(t); if(!m) return 'Guardando…'; const d = new Date(m); const w = DIAS[d.getDay()]; return w.charAt(0).toUpperCase() + w.slice(1) + ' ' + d.getDate() + ' ' + MESES[d.getMonth()] + ' ' + h12(d); };
 const MOT = [['faltante', 'Faltante'], ['sobrante', 'Sobrante'], ['mal_estado', 'Mal estado'], ['rechazado', 'Rechazado'], ['otro', 'Otro']];
 const MOT_NOM = {faltante:'Faltante', sobrante:'Sobrante', mal_estado:'Mal estado', rechazado:'Rechazado', otro:'Otro'};
 const MANUAL = ['mal_estado', 'rechazado', 'otro'];
@@ -4795,7 +4797,7 @@ function plGate(cb){ if(rxAdm()) cb(); else A.codigo(() => { R.admHasta = Date.n
 function plGuardarProds(id, lista){ db.collection('proveedores_os').doc(id).set({productos_lista:lista}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }
 function vLista(){
   const nr = porRecibir().length + borradores().length, np = ppPend().length;
-  const sub = [['pedir', 'Por pedir' + (np ? ' <i>' + np + '</i>' : '')], ['recibir', 'Por recibir' + (nr ? ' <i>' + nr + '</i>' : '')], ['hist', 'Historial'], ['lista', 'Lista']];
+  const sub = [['pedir', 'Por pedir' + (np ? ' <i>' + np + '</i>' : '')], ['recibir', 'Por recibir' + (nr ? ' <i>' + nr + '</i>' : '')], ['hist', 'Historial'], ['lista', 'Proveedores']];
   const bar = '<div class="rx-tabs">' + sub.map(t => '<button class="rx-tab ' + (PL.sub === t[0] ? 'on' : '') + '" data-rx="pl-sub" data-v="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
   return bar + (PL.sub === 'pedir' ? vPedir() : PL.sub === 'recibir' ? vPrec() + '<button class="rx-b" data-rx="nuevo" style="margin-top:14px">＋ Recepción sin pedido 🔒</button>' : PL.sub === 'hist' ? vHist() : vProvs());
 }
@@ -4810,17 +4812,17 @@ function vPedir(){
   return '<div class="rx-list">' + l.map(r => { const n = (r.items || []).filter(i => !i.enviado).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' por pedir</div><div class="rx-mu">' + (r.items || []).filter(i => !i.enviado).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
 }
 function vPedirDet(d){
-  const items = d.items || [], nombres = R.provs.map(p => p.nombre), grupos = {};
+  const items = d.items || [], nombres = provsFrecuentes().slice().sort((x, y) => String(x).localeCompare(String(y))), grupos = {};   // registrados + los de recepciones anteriores
   let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pp-back">← Por pedir</button><div class="rx-tt">' + (d.numero ? '#' + esc(d.numero) + ' · ' : '') + esc(d.estacion || 'Lista') + '</div><span></span></div>';
   h += '<div class="rx-card"><h3>¿A quién se lo pides?</h3>' + (nombres.length ? '' : '<div class="rx-mu">Primero registra tus proveedores en la pestaña «Lista».</div>') +
     items.map((it, k) => {
-      if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
+      if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + (k + 1) + '. ' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
       const pr = ppProvDe(it); if(pr) (grupos[pr] = grupos[pr] || []).push(k);
-      return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><div><b>' + esc(it.producto_nombre) + '</b> <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></div>' +
-        '<select class="rx-in" data-pp="' + k + '" style="margin-top:4px"><option value="">Elegir proveedor…</option>' + nombres.map(n => '<option value="' + esc(n) + '"' + (n === pr ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select></div>';
+      return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><div><b>' + (k + 1) + '. ' + esc(it.producto_nombre) + '</b> <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></div>' +
+        '<select class="rx-in" data-pp="' + k + '" style="margin-top:4px"><option value="">Elegir proveedor…</option>' + nombres.map(n => '<option value="' + esc(n) + '"' + (n === pr ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '<option value="__nuevo">＋ Proveedor nuevo…</option></select></div>';
     }).join('') + '</div>';
   Object.keys(grupos).forEach(pr => {
-    h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map(k => '<div class="rx-mu">• ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
+    h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
       '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">💬 Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>';
   });
   return h;
@@ -4836,7 +4838,7 @@ function ppEnviar(d, prov, wa){
   const idx = []; (d.items || []).forEach((it, k) => { if(!it.enviado && ppProvDe(it) === prov) idx.push(k); }); if(!idx.length) return;
   const its = idx.map(k => d.items[k]);
   if(wa){
-    const lineas = its.map(it => '• ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
+    const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
     const msg = 'Hola ' + prov + ', buen día. Pedido de Morochos ' + A.localNombre() + ':\n' + lineas + '\n\nGracias.';
     window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
   }
@@ -4982,7 +4984,7 @@ function vPrec(){
   if(!l.length && borradores().length) return vPend();
   if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
   return '<div class="rx-list">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div><div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px;display:block;text-align:center">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
-    '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div class="rx-mu" style="margin:14px 2px 6px;font-weight:700">En curso (sin terminar)</div>' + vPend() : '');
+    '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
   const r = R.nw[id]; if(!r) return;
@@ -5000,7 +5002,7 @@ function vHist(){
   if(q) l = l.filter(r => norm(r.proveedor + ' ' + (r.documento || '') + ' ' + (r.items || []).map(i => i.nombre || i.producto_nombre).join(' ')).indexOf(q) >= 0);
   return '<input class="rx-in" id="rx-hq" placeholder="Buscar proveedor, factura o producto…" autocomplete="off" value="' + esc(R.fq) + '">' +
     '<div class="rx-chips sm">' + [['todas', 'Todas'], ['conf', 'Confirmadas'], ['dif', '⚠ Diferencias'], ['vinc', '⏳ Por vincular'], ['anul', 'Anuladas']].map(x => '<button class="rx-chip ' + (f === x[0] ? 'on' : '') + '" data-rx="filtro" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
-    (l.length ? '<div class="rx-list">' + l.slice(0, 80).map(r => { const dif = (r.items || []).filter(i => i.estado_item && i.estado_item !== 'ok').length, anu = estadoDe(r) === 'anulada';
+    (l.length ? '<div class="rx-list rx-uno">' + l.slice(0, 80).map(r => { const dif = (r.items || []).filter(i => i.estado_item && i.estado_item !== 'ok').length, anu = estadoDe(r) === 'anulada';
       return '<button class="rx-hr ' + (anu ? 'anul' : '') + '" data-rx="hist-open" data-id="' + esc(r.id) + '"><div class="rx-hh"><b>' + esc(r.proveedor || 'Entrega') + (r.documento ? ' · ' + esc(r.documento) : '') + '</b>' + (anu ? '<span class="rx-tag no_llego">Anulada</span>' : '') + '</div><div class="rx-mu">' + esc(fechaDia(r.fecha || r.fecha_actividad)) + ' · ' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + (r.responsable ? ' · ' + esc(r.responsable) : '') + '</div>' +
         '<div class="rx-bd">' + (dif ? '<span class="rx-tag diferencia">⚠ ' + dif + ' con diferencia</span>' : (anu ? '' : '<span class="rx-tag ok">✔ Completa</span>')) + (r.pendiente_vinculacion ? '<span class="rx-tag prov">⏳ por vincular</span>' : '') + (r.comprobante && r.comprobante.foto || r.foto ? '<span class="rx-tag">📷</span>' : '') + (r.anterior ? '<span class="rx-tag">anterior</span>' : '') + '</div></button>'; }).join('') + '</div>' : '<div class="rx-vacio">No hay recepciones con ese filtro.</div>');
 }
@@ -5312,7 +5314,11 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => { const x = e.target;
   if(x && x.id === 'pl-tel' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val !== (pv.telefono || '')) plGate(() => { pv.telefono = val; db.collection('proveedores_os').doc(pv.id).set({telefono:val}, {merge:true}).then(() => toast('Número guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }); return; }
-  if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(dd) ppSet(dd, +x.getAttribute('data-pp'), x.value); return; }
+  if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(!dd) return; const k = +x.getAttribute('data-pp');
+    if(x.value === '__nuevo'){ const nom = (window.prompt('Nombre del proveedor nuevo:') || '').trim(); if(!nom){ render(); return; } const pid = 'prov_' + slug(nom);
+      if(!plProv(pid)){ db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:'', productos_lista:[], creado:SV()}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); R.provs.push({id:pid, nombre:nom, telefono:'', productos_lista:[]}); }
+      ppSet(dd, k, (plProv(pid) || {}).nombre || nom); return; }
+    ppSet(dd, k, x.value); return; }
   const i = x; if(i && (i.id === 'rx-foto-cam' || i.id === 'rx-foto-img') && i.files && i.files[0] && R.d){ leerFoto(i.files[0]); i.value = ''; } });
 
 window.rxVista = function(v){ R.vista = v === 'lista' ? 'lista' : 'rx'; if(R.vista === 'lista'){ PL.sel = null; PL.pick = false; } escuchar(); R.det = null; render(); };
