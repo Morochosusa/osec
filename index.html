@@ -1172,6 +1172,11 @@
     <div id="mo-root"></div>
   </div>
 </div>
+<div id="eqr-sheet" class="mo-sheet">
+  <div class="mo-sh-top"><button class="bt" data-eqr="cerrar" style="min-height:52px">‹ Cerrar</button><b id="eqr-sh-t" style="font-size:19px"></b></div>
+  <div class="mo-sh-body" id="eqr-sh-b"></div>
+  <div class="mo-sh-foot"><button class="bt ac" data-eqr="guardar" style="width:100%">Enviar reporte</button></div>
+</div>
 <div id="mo-sheet" class="mo-sheet">
   <div class="mo-sh-top"><button class="bt" data-mo="cerrar" style="min-height:52px">‹ Cerrar</button><b id="mo-sh-t" style="font-size:19px"></b></div>
   <div class="mo-sh-body" id="mo-sh-b"></div>
@@ -2303,7 +2308,7 @@ const ESTACIONES = {
 };
 // Módulos habilitados en esta etapa de prueba. Los demás se ven con 🔒 para que el equipo sepa que vienen, pero no se pueden abrir.
 // Para habilitar uno más, agrégalo a esta lista.
-const MODULOS_ACTIVOS=['clock','prod','bajas','pedido','porrecibir','recepcion','inventario','mant'];
+const MODULOS_ACTIVOS=['clock','prod','bajas','pedido','porrecibir','recepcion','inventario','mant','equipo'];
 const TABS=['pedido','recepcion','prod','bajas','inventario','mant','check','equipo','tips','clock'];   // orden de los módulos
 const AREAS_EST=['Panadería producción','Panadería','Cafetería','Cocina'];
 const estMod={check:'',bajas:'',equipo:''};      // área elegida dentro de cada módulo
@@ -3923,16 +3928,82 @@ function iniciarListeners(){
 
 // ── EQUIPO / GUÍA ──
 const INVENTARIO_EQUIPO=[{nombre:'Batidora industrial',cant:1,estado:'Bueno'},{nombre:'Horno de panadería',cant:1,estado:'Bueno'},{nombre:'Porcionadora de masa',cant:1,estado:'Bueno'},{nombre:'Laminadora',cant:1,estado:'Bueno'},{nombre:'Carros de pan (bandejas)',cant:4,estado:'Bueno'},{nombre:'Bandejas de horneado',cant:20,estado:'Bueno'},{nombre:'Tazones de mezcla (varios)',cant:6,estado:'Bueno'},{nombre:'Rasquetas de masa',cant:3,estado:'Bueno'},{nombre:'Rodillos',cant:2,estado:'Bueno'},{nombre:'Cortadores y moldes',cant:1,estado:'Bueno'},{nombre:'Termómetro de horno',cant:1,estado:'Bueno'},{nombre:'Balanza digital',cant:1,estado:'Bueno'},{nombre:'Toallas de trabajo',cant:6,estado:'Bueno'},{nombre:'Mandil',cant:2,estado:'Bueno'},{nombre:'Malla de cabello',cant:5,estado:'Bueno'},{nombre:'Cuchillos de panadería',cant:3,estado:'Bueno'},{nombre:'Tabla de corte',cant:2,estado:'Bueno'},{nombre:'Lavavajillas industrial',cant:1,estado:'Bueno'}];
-// Utensilios y equipos por estación. Hoy solo Panadería producción tiene lista.
+// Lista anterior (respaldo): solo se usa mientras no haya equipos cargados en Firebase (equipos_ec).
 const EQUIPO_POR_ESTACION = { 'Panadería producción': INVENTARIO_EQUIPO };
 const GUIA_PRODUCTOS=[{cat:'Panes artesanales',productos:[{nombre:'Cachito',detalle:'15 unidades por tanda. Forma de cuerno, masa dulce enriquecida.'},{nombre:'Cacho con queso',detalle:'12 unidades. Relleno de queso fresco, bordes sellados.'},{nombre:'Cholas',detalle:'Pan redondo suave, miga esponjosa, costra dorada.'},{nombre:'Empanada blanca',detalle:'18 unidades. Masa neutra, sellado tradicional.'},{nombre:'Enquesillados',detalle:'16 unidades. Rellenos de queso, doblados en triángulo.'},{nombre:'Focaccia',detalle:'Pan plano italiano con aceite y hierbas.'},{nombre:'Gusanos de mora',detalle:'16 unidades. Forma enrollada con relleno de mora.'},{nombre:'Jamón con queso',detalle:'16 unidades. Relleno de jamón y queso fundido.'},{nombre:'Palanqueta',detalle:'16 unidades. Pan alargado crocante.'},{nombre:'Pan de orégano',detalle:'Focaccia con orégano y aceite de oliva.'},{nombre:'Pan de panela',detalle:'Dulce, hecho con panela negra. Miga oscura.'},{nombre:'Pan de tiesto',detalle:'Cocción en tiesto de barro. Textura rústica.'},{nombre:'Rollos de canela',detalle:'15 unidades. Enrollados con canela y azúcar.'}]},{cat:'Panes de vegetales',productos:[{nombre:'Pan de camote',detalle:'16 unidades. Masa con puré de camote, color naranja suave.'},{nombre:'Pan de zapallo',detalle:'16 unidades. Masa con zapallo, textura húmeda.'}]},{cat:'Empanadas',productos:[{nombre:'Empanada de verde',detalle:'Masa de plátano verde, relleno variable.'},{nombre:'Empanada integral',detalle:'15 unidades. Masa de harina integral.'},{nombre:'Tortillas de trigo',detalle:'Nuevo. Masa de trigo, delgadas y flexibles.'},{nombre:'Empanada de carne',detalle:'Nuevo. Relleno de carne molida sazonada.'},{nombre:'Empanada de pollo',detalle:'Nuevo. Relleno de pollo desmenuzado.'}]},{cat:'Repostería',productos:[{nombre:'Cake de banana grande',detalle:'Bizcocho de banana, molde grande. Porcionar al servir.'},{nombre:'Cake de banana pequeño',detalle:'Misma receta en molde individual.'},{nombre:'Tiramisú',detalle:'Postre italiano. Producción los viernes.'},{nombre:'Cheesecake frutos rojos',detalle:'Base de galleta, relleno cremoso, cubierta de frutos rojos. Viernes.'},{nombre:'Cheesecake maracuyá',detalle:'Base de galleta, relleno cremoso, cubierta de maracuyá. Viernes.'}]}];
-function renderEquipo(){const tbody=document.getElementById('equipo-tbody');if(!tbody)return;const lista=EQUIPO_POR_ESTACION[estMod.equipo]||[];if(!lista.length){tbody.innerHTML='<tr><td colspan="3" style="padding:18px 6px;color:var(--gray-4);">Aún no hay equipos registrados para esta estación.</td></tr>';return;}tbody.innerHTML=lista.map(e=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:9px 6px;font-weight:500;">${e.nombre}</td><td style="padding:9px 6px;text-align:center;color:var(--gray-5);">${e.cant}</td><td style="padding:9px 6px;"><span style="background:var(--green-soft);color:var(--green);font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;">${e.estado}</span></td></tr>`).join('');}
+// ── MI EQUIPO · reportes de daño / novedad / pérdida (colección equipo_reportes; Manager EC los revisa) ──
+const EQR={rep:[],cat:null,on:false,ed:null,foto:null,busy:false};
+const EST_EQUIPO=['Cafetería','Cocina','Panadería producción'];   // Mi equipo: solo estas 3 estaciones
+const EQR_TIPOS=[['danado','🔨 Roto o dañado','er'],['novedad','⚠️ Con novedad','wn'],['perdido','❓ Perdido o falta','er']];
+function eqrSuscribir(){
+  if(EQR.on||!dispositivo)return;EQR.on=true;
+  onSnapshot(query(collection(db,'equipo_reportes'),where('local','==',dispositivo.local)),s=>{EQR.rep=s.docs.map(d=>({id:d.id,...d.data()}));if(document.body.dataset.page==='equipo')renderEquipo();},e=>{console.error('equipo_reportes',e);});
+  onSnapshot(query(collection(db,'equipos_ec'),where('local','==',dispositivo.local)),s=>{EQR.cat=s.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!x.archivado);if(document.body.dataset.page==='equipo')renderEquipo();},e=>{console.error('equipos_ec',e);});
+}
+const eqrAbiertos=nom=>EQR.rep.filter(r=>r.estado!=='resuelto'&&r.estacion===estMod.equipo&&String(r.equipo||'').toLowerCase()===String(nom||'').toLowerCase());
+function eqrEstadoDe(nom,base){
+  const a=eqrAbiertos(nom);if(!a.length)return {t:base||'Bueno',c:'ok'};
+  if(a.some(r=>r.tipo==='danado'))return {t:'Dañado',c:'er'};
+  if(a.some(r=>r.tipo==='perdido'))return {t:'Perdido',c:'er'};
+  return {t:'Con novedad',c:'wn'};
+}
+function renderEquipo(){
+  const tbody=document.getElementById('equipo-tbody');if(!tbody)return;eqrSuscribir();
+  if(!EST_EQUIPO.includes(estMod.equipo)){estMod.equipo=EST_EQUIPO[2];pintarAreas('equipo');}
+  // La lista sale de Firebase (equipos_ec, la carga Manager EC). Mientras no haya ninguna cargada, se muestra la lista anterior.
+  const lista=EQR.cat&&EQR.cat.length?EQR.cat.filter(x=>x.estacion===estMod.equipo).map(x=>({nombre:x.nombre,cant:x.cantidad==null?1:x.cantidad,estado:'Bueno'})).sort((a,b)=>a.nombre.localeCompare(b.nombre)):(EQUIPO_POR_ESTACION[estMod.equipo]||[]);
+  const col={ok:['var(--green-soft)','var(--green)'],wn:['var(--amber-soft)','var(--amber)'],er:['var(--red-soft,#fbe4e1)','var(--red,#c0392b)']};
+  const fila=e=>{const st=eqrEstadoDe(e.nombre,e.estado),c=col[st.c];
+    return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:9px 6px;font-weight:500;">${esc(e.nombre)}</td><td style="padding:9px 6px;text-align:center;color:var(--gray-5);">${e.cant}</td><td style="padding:9px 6px;white-space:nowrap;"><span style="background:${c[0]};color:${c[1]};font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;">${st.t}</span> <button class="bt" data-eqr="abrir" data-n="${esc(e.nombre)}" style="min-height:40px;padding:0 10px;font-size:13px;width:auto;margin-left:4px">Reportar</button></td></tr>`;};
+  tbody.innerHTML=(lista.length?lista.map(fila).join(''):'<tr><td colspan="3" style="padding:18px 6px;color:var(--gray-4);">Aún no hay equipos registrados para esta estación.</td></tr>')+
+    `<tr><td colspan="3" style="padding:14px 0 4px;"><button class="bt ac" data-eqr="abrir" data-n="" style="width:100%">＋ Reportar otro equipo o utensilio</button></td></tr>`;
+}
+function eqrAbrir(nom){
+  EQR.ed={equipo:nom||''};EQR.foto=null;
+  let q='';try{q=localStorage.getItem('eqr_quien')||'';}catch(e){}
+  $('eqr-sh-t').textContent=nom?'Reportar · '+nom:'Reportar equipo o utensilio';
+  $('eqr-sh-b').innerHTML=
+    `<div class="field mo-f"><label>¿Qué pasó?</label><div class="chips" id="eqr-tipos" style="display:flex;gap:8px;flex-wrap:wrap">${EQR_TIPOS.map(t=>`<button class="qchip" data-eqr="tipo" data-v="${t[0]}">${t[1]}</button>`).join('')}</div></div>`+
+    (nom?'':`<div class="field mo-f"><label>Equipo o utensilio *</label><input id="eqr-eq" class="form-control" placeholder="Ej: Cuchillo grande, molde, batidora de mano"></div>`)+
+    `<div class="field mo-f"><label>Cuéntanos qué pasó *</label><textarea id="eqr-nota" class="form-control" rows="3" placeholder="Ej: Se cayó y se partió el mango"></textarea></div>`+
+    `<div class="field mo-f"><label>¿Quién reporta? *</label><input id="eqr-quien" class="form-control" value="${esc(q)}" placeholder="Tu nombre"></div>`+
+    `<div class="field mo-f"><label>Foto (recomendada)</label><label class="bt" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer">📷 Tomar o elegir foto<input id="eqr-file" type="file" accept="image/*" capture="environment" style="display:none"></label><img id="eqr-prev" style="display:none;max-width:100%;border-radius:12px;margin-top:10px"></div>`;
+  $('eqr-sheet').classList.add('open');$('eqr-sh-b').scrollTop=0;
+}
+const eqrCerrar=()=>{$('eqr-sheet').classList.remove('open');EQR.ed=null;};
+async function eqrGuardar(){
+  if(EQR.busy||!EQR.ed)return;
+  const tipo=EQR.ed.tipo,nota=$('eqr-nota').value.trim(),quien=$('eqr-quien').value.trim(),eq=EQR.ed.equipo||($('eqr-eq')&&$('eqr-eq').value.trim());
+  if(!tipo){showToast('⚠️ Elige qué pasó');return;}
+  if(!eq){showToast('⚠️ Escribe el nombre del equipo');return;}
+  if(!nota){showToast('⚠️ Cuéntanos qué pasó');return;}
+  if(!quien){showToast('⚠️ Escribe tu nombre');return;}
+  EQR.busy=true;const b=document.querySelector('#eqr-sheet [data-eqr=guardar]');if(b){b.disabled=true;b.textContent='Guardando…';}
+  try{
+    const dref=doc(collection(db,'equipo_reportes'));let foto='';
+    if(EQR.foto){try{const r=ref(storage,`equipo_reportes/${dispositivo.local}/${dref.id}.jpg`);await uploadString(r,EQR.foto,'data_url');foto=await getDownloadURL(r);}catch(e){console.error('foto',e);showToast('⚠️ La foto no subió; se guarda el reporte sin foto');}}
+    await setDoc(dref,{local:dispositivo.local,estacion:estMod.equipo,equipo:eq,tipo,nota,quien,foto,estado:'abierto',fecha:serverTimestamp(),fecha_ms:Date.now()});
+    lsSet('eqr_quien',quien);eqrCerrar();renderEquipo();
+  }catch(e){console.error(e);showToast('❌ No se pudo guardar el reporte. Revisa la conexión.');}
+  EQR.busy=false;if(b){b.disabled=false;b.textContent='Enviar reporte';}
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest&&e.target.closest('[data-eqr]');if(!t)return;const a=t.dataset.eqr;
+  if(a==='abrir')eqrAbrir(t.dataset.n);
+  else if(a==='cerrar')eqrCerrar();
+  else if(a==='guardar')eqrGuardar();
+  else if(a==='tipo'&&EQR.ed){EQR.ed.tipo=t.dataset.v;document.querySelectorAll('#eqr-tipos .qchip').forEach(x=>x.classList.toggle('sel',x===t));}
+});
+document.addEventListener('change',async e=>{
+  if(e.target.id!=='eqr-file'||!e.target.files[0])return;
+  try{EQR.foto=await reducirFoto(e.target.files[0]);const p=$('eqr-prev');p.src=EQR.foto;p.style.display='block';}catch(er){showToast('⚠️ No se pudo leer la foto');}
+});
 function renderGuia(){const wrap=document.getElementById('guia-wrap');if(!wrap)return;wrap.innerHTML=GUIA_PRODUCTOS.map(cat=>`<div class="card" style="margin-bottom:12px;"><div style="font-size:11px;font-weight:700;color:var(--gray-4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">${cat.cat}</div>${cat.productos.map(p=>`<div style="padding:10px 0;border-bottom:1px solid var(--gray-2);"><div style="font-size:14px;font-weight:600;color:var(--black);margin-bottom:3px;">${p.nombre}</div><div style="font-size:12px;color:var(--gray-4);line-height:1.5;">${p.detalle}</div></div>`).join('')}</div>`).join('');}
 
 // ── ÁREA DENTRO DE CADA MÓDULO (Actividades, Bajas, Mi equipo) ──
 function pintarAreas(m){
   const c=$('ab-'+m);if(!c)return;
-  c.innerHTML=AREAS_EST.map(e=>`<button class="qchip ${e===estMod[m]?'sel':''}" data-e="${esc(e)}">${ESTACIONES[e].icon} ${esc(e)}</button>`).join('');
+  c.innerHTML=(m==='equipo'?EST_EQUIPO:AREAS_EST).map(e=>`<button class="qchip ${e===estMod[m]?'sel':''}" data-e="${esc(e)}">${ESTACIONES[e].icon} ${esc(e)}</button>`).join('');
 }
 function cambiarArea(m,e){
   estMod[m]=e;lsSet(`ec_area_${m}_${dispositivo.local}`,e);pintarAreas(m);vib();
@@ -3947,7 +4018,7 @@ function cambiarArea(m,e){
 function iniciarAreas(){
   ['check','bajas','equipo'].forEach(m=>{
     const g=lsGet(`ec_area_${m}_${dispositivo.local}`,'');
-    estMod[m]=AREAS_EST.includes(g)?g:AREAS_EST[0];
+    estMod[m]=(m==='equipo'?EST_EQUIPO:AREAS_EST).includes(g)?g:(m==='equipo'?EST_EQUIPO[2]:AREAS_EST[0]);
     pintarAreas(m);
     $('ab-'+m).onclick=ev=>{const b=ev.target.closest('.qchip');if(b)cambiarArea(m,b.dataset.e);};
   });
