@@ -4815,6 +4815,7 @@ function vPedir(){
 function vPedirDet(d){
   const items = d.items || [], nombres = provsFrecuentes().slice().sort((x, y) => String(x).localeCompare(String(y))), grupos = {};   // registrados + los de recepciones anteriores
   let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pp-back">← Por pedir</button><div class="rx-tt">' + (d.numero ? '#' + esc(d.numero) + ' · ' : '') + esc(d.estacion || 'Lista') + '</div><span></span></div>';
+  h += '<div class="rx-card"><h3>Fecha de entrega</h3><input class="rx-in" id="pp-fecha" type="date" value="' + esc(d.fecha_entrega || ppManana()) + '"><div class="rx-mu">' + esc(ppFechaLarga(d.fecha_entrega || ppManana())) + '</div></div>';
   h += '<div class="rx-card"><h3>¿A quién se lo pides?</h3>' + (nombres.length ? '' : '<div class="rx-mu">Primero registra tus proveedores en la pestaña «Lista».</div>') +
     items.map((it, k) => {
       if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + (k + 1) + '. ' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
@@ -4828,6 +4829,8 @@ function vPedirDet(d){
   });
   return h;
 }
+const ppManana = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const ppFechaLarga = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if(!m) return ''; const t = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-EC', {weekday:'long', day:'numeric', month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); };
 function ppTel(nombre){
   const pv = R.provs.filter(p => norm(p.nombre) === norm(nombre))[0]; let t = String((pv && pv.telefono) || '').replace(/\D/g, '');
   if(!t) return ''; if(t.indexOf('593') === 0) return t; if(t.charAt(0) === '0') return '593' + t.slice(1); return t.length <= 9 ? '593' + t : t;
@@ -4838,17 +4841,19 @@ function ppSet(d, k, v){
 function ppEnviar(d, prov, wa){
   const idx = []; (d.items || []).forEach((it, k) => { if(!it.enviado && ppProvDe(it) === prov) idx.push(k); }); if(!idx.length) return;
   const its = idx.map(k => d.items[k]);
+  const nOrd = (d.n_orden || 0) + 1, codigo = 'OP-' + (d.numero || '0') + '-' + nOrd, fEnt = d.fecha_entrega || ppManana();
   if(wa){
     const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
-    const msg = 'Hola ' + prov + ', buen día. Pedido de Morochos ' + A.localNombre() + ':\n' + lineas + '\n\nGracias.';
+    const msg = '*ORDEN DE PEDIDO N.º ' + codigo + '*\nMorochos Coffee · ' + A.localNombre() + '\n\nEstimado/a ' + prov + ':\n\nPor medio de la presente solicitamos el siguiente pedido:\n\n' + lineas +
+      '\n\n*Fecha de entrega:* ' + ppFechaLarga(fEnt) + '\n\nAgradecemos confirmar la recepción de esta orden y la fecha de entrega.\n\nAtentamente,\nMorochos Coffee · ' + A.localNombre();
     window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
   }
-  const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion);
+  const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
   db.collection('recepciones_bodega').doc('pp_' + d.id + '_' + slug(prov) + '_' + Date.now()).set(rec).catch(er => { console.error(er); toast(errTxt(er)); });
-  idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; });
+  idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; d.items[k].orden = codigo; }); d.n_orden = nOrd;
   const todo = d.items.every(i => i.enviado); d.estado = todo ? 'enviado' : 'por_pedir';
-  db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
-  toast('✅ Pedido a ' + prov + ' registrado · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
+  db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado, n_orden:nOrd, fecha_entrega:fEnt}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
+  toast('✅ Orden ' + codigo + ' registrada · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
 }
 function vProvs(){
   const pv = PL.sel && plProv(PL.sel);
@@ -4887,9 +4892,9 @@ function plEvento(a, id, i, t0){
     case 'pl-add': { const nom = (($('#pl-nn') || {}).value || '').trim(), tel = (($('#pl-nt') || {}).value || '').trim(); if(!nom){ toast('Escribe el nombre del proveedor'); break; }
       if(R.provs.some(x => norm(x.nombre) === norm(nom))){ toast('Ese proveedor ya existe'); break; }
       plGate(() => { const pid = 'prov_' + slug(nom); db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:tel, productos_lista:[], eliminado:false, creado:SV()}, {merge:true}).then(() => toast('Proveedor agregado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); if(!plProv(pid)) R.provs.push({id:pid, nombre:nom, telefono:tel, productos_lista:[]}); R.provsEli = R.provsEli.filter(x => x !== norm(nom)); PL.nuevo = false; PL.q = ''; PL.sel = pid; PL.pick = false; PL.pq = ''; render(); }); break; }
-    case 'pl-padd': PL.pick = true; PL.pq = ''; render(); break;
+    case 'pl-padd': PL.pick = true; PL.pq = ''; R.noFocus = true; render(); break;
     case 'pl-pfin': PL.pick = false; PL.pq = ''; render(); break;
-    case 'pl-ppick': if(!pv) break; plGate(() => { const it = cat().filter(x => x.id === id)[0]; if(!it) return; const l = plProds(pv).slice(), k = l.findIndex(x => x.id === id); if(k >= 0) l.splice(k, 1); else l.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); render(); }); break;
+    case 'pl-ppick': if(!pv) break; plGate(() => { const it = cat().filter(x => x.id === id)[0]; if(!it) return; const l = plProds(pv).slice(), k = l.findIndex(x => x.id === id); if(k >= 0) l.splice(k, 1); else l.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); R.noFocus = true; render(); }); break;
     case 'pl-pnew': { if(!pv) break; const nom = PL.pq.trim(); if(!nom) break; plGate(() => { const l = plProds(pv).slice(); if(!l.some(x => norm(x.nombre) === norm(nom))) l.push({id:'n_' + slug(nom), nombre:nom, unidad:'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); PL.pq = ''; render(); }); break; }
     case 'pl-pdel': if(!pv) break; plGate(() => { const l = plProds(pv).slice(); l.splice(i, 1); pv.productos_lista = l; plGuardarProds(pv.id, l); render(); }); break;
     case 'pl-del': if(!pv) break; plGate(() => { if(!confirm('¿Eliminar a ' + pv.nombre + '? Las recepciones ya hechas no se borran.')) return; db.collection('proveedores_os').doc(pv.id).set({eliminado:true, nombre:pv.nombre}, {merge:true}).then(() => toast('Proveedor eliminado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); R.provs = R.provs.filter(x => x.id !== pv.id); R.provsEli.push(norm(pv.nombre)); PL.sel = null; render(); }); break;
@@ -4989,7 +4994,7 @@ function vPrec(){
   const l = porRecibir();
   if(!l.length && borradores().length) return vPend();
   if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
-  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div><div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
+  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b>' + (r.proveedor ? esc(r.proveedor) + ' · ' : '') + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.orden_codigo ? '<div class="rx-mu">Orden ' + esc(r.orden_codigo) + (r.fecha_entrega ? ' · Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) : '') + '</div>' : '') + '<div class="rx-mu">' + (r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') + ((r.items || []).length > 4 ? '…' : '') + '</div><span class="rx-b ac" style="margin-top:8px">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
     '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
@@ -5319,6 +5324,7 @@ document.addEventListener('input', e => {
   else if(t.id === 'rx-pn' && R.m && R.m.nuevo){ R.m.nuevo.nombre = t.value; }
 });
 document.addEventListener('change', e => { const x = e.target;
+  if(x && x.id === 'pp-fecha' && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(dd && x.value){ dd.fecha_entrega = x.value; db.collection('pedir_proveedores').doc(dd.id).set({fecha_entrega:x.value}, {merge:true}).catch(er => console.error(er)); R.noFocus = true; render(); } return; }
   if(x && x.id === 'pl-nom' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val && val !== pv.nombre) plGate(() => { if(R.provs.some(o => o.id !== pv.id && norm(o.nombre) === norm(val))){ toast('Ese nombre ya existe'); render(); return; } const ant = (pv.anteriores || []).concat([pv.nombre]); R.provsEli.push(norm(pv.nombre)); pv.anteriores = ant; pv.nombre = val; db.collection('proveedores_os').doc(pv.id).set({nombre:val, anteriores:ant}, {merge:true}).then(() => toast('Nombre guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); render(); }); else if(pv) x.value = pv.nombre; return; }
   if(x && x.id === 'pl-tel' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val !== (pv.telefono || '')) plGate(() => { pv.telefono = val; db.collection('proveedores_os').doc(pv.id).set({telefono:val}, {merge:true}).then(() => toast('Número guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }); return; }
   if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(!dd) return; const k = +x.getAttribute('data-pp');
