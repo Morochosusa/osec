@@ -4886,7 +4886,7 @@ function vPedirDet(d){
     h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
       ((PL.wa && PL.wa[d.id + '|' + pr]) ?
         '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que toques «✓ Pedido».</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Pedido</button></div></div>' :
-        '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>');
+        '<div style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '" style="width:100%">' + WA_ICON + ' Enviar por WhatsApp</button></div></div>');
   });
   return h;
 }
