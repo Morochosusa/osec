@@ -1430,10 +1430,47 @@ function defaultFicha(p){
   return {id:p.id, nombre:p.nombre, presentacion:p.unidad, unidad:p.uni, codigo:codigoDe(p), decimales:(p.uni === 'galones' || p.uni === 'libras') ? 1 : 0,
           batch:p.batch, solo_batch:0, por_etiqueta:0, max:0, precio:0, modo_defecto:'ref', vida:{ref:0, con:0, amb:0}, foto:null};
 }
+/* ---- Food cost: receta en g/kg (ml/l, unidades) × precio de la materia prima ---- */
+const U_BASE = {g:1, kg:1000, lb:453.592, ml:1, l:1, litros:1000, unidades:1};
+const U_FAM = {kg:['g','kg'], g:['g','kg'], lb:['g','kg'], litros:['ml','l'], ml:['ml','l'], unidades:['unidades']};
+const U_RB = {g:1, kg:1000, ml:1, l:1000, unidades:1};
+const mpDe = id => S.mp.filter(m => m._id === id)[0] || null;
+function costoLinea(r){
+  const m = mpDe(r.mid); if(!m || !(m.precio > 0)) return null;
+  const cantBase = r.cant * (U_RB[r.u] || 1), unBase = U_BASE[m.unidad] || 1;
+  return cantBase / unBase * m.precio;
+}
+function costoReceta(p){
+  const rec = p.receta || []; let tot = 0, falta = 0;
+  rec.forEach(r => { const c = costoLinea(r); if(c == null) falta++; else tot += c; });
+  const unit = p.batch > 0 ? tot / p.batch : 0;
+  return {lote:tot, unidad:unit, pct:(p.precio > 0 && tot > 0) ? unit / p.precio * 100 : null, falta:falta, n:rec.length};
+}
+function recetaHTML(p){
+  const rec = p.receta || [], c = costoReceta(p);
+  let h = '<div class="sec"><h3>Receta y costo (para 1 batch = ' + fmt(p.batch) + ' ' + esc(p.unidad) + ')</h3>';
+  if(!rec.length) h += '<div class="mu small">Agrega los insumos que lleva un batch. El precio se toma de Inventario › Panadería › Materia prima.</div>';
+  rec.forEach((r, i) => {
+    const m = mpDe(r.mid), cl = costoLinea(r), fam = U_FAM[m ? m.unidad : ''] || [r.u];
+    h += '<div class="row"><div style="flex:1;min-width:0">' + esc(r.nombre) + '<div class="mu small">' + (cl == null ? '<b style="color:#b3261e">sin precio</b>' : money(cl)) + '</div></div>' +
+      '<button class="btn val" data-act="rnum" data-i="' + i + '" style="min-width:0">' + fmt(r.cant) + '</button>' +
+      '<button class="btn" data-act="runi" data-i="' + i + '" style="min-width:64px">' + esc(r.u) + (fam.length > 1 ? ' ⇄' : '') + '</button>' +
+      '<button class="btn" data-act="rdel" data-i="' + i + '" style="color:#b3261e;border-color:#b3261e;min-width:0">✕</button></div>';
+  });
+  h += '<button class="btn" data-act="radd" style="margin-top:8px">＋ Agregar insumo</button>';
+  if(rec.length){
+    h += '<div class="fcbox" style="margin-top:12px;padding:12px;border-radius:12px;background:#f4f1ea">' +
+      '<div class="row"><div>Costo del batch</div><b>' + money(c.lote) + '</b></div>' +
+      '<div class="row"><div>Costo por ' + (p.batch > 0 ? 'unidad' : '—') + '</div><b>' + money(c.unidad) + '</b></div>' +
+      '<div class="row"><div>Food cost</div><b style="font-size:22px;color:' + (c.pct == null ? '#1f1f1d' : c.pct > 35 ? '#b3261e' : c.pct > 30 ? '#c77d00' : '#1d7a3a') + '">' + (c.pct == null ? (p.precio > 0 ? '—' : 'Falta precio de venta') : c.pct.toFixed(1).replace('.', ',') + ' %') + '</b></div>' +
+      (c.falta ? '<div class="mu small" style="color:#b3261e">Faltan precios en ' + c.falta + ' insumo(s): el costo está incompleto.</div>' : '') + '</div>';
+  }
+  return h + '</div>';
+}
 function fichaDe(pid){
   const p = PROD_ALL.filter(x => x.id === pid)[0]; if(!p) return null;
   const d = S.fichas[pid], f = Object.assign(defaultFicha(p), d || {});
-  f.vida = Object.assign({ref:0, con:0, amb:0}, f.vida || {}); f.id = pid; f.seccion = p.seccion; f.guardada = !!d; return f;
+  f.vida = Object.assign({ref:0, con:0, amb:0}, f.vida || {}); f.receta = (f.receta || []).map(r => Object.assign({}, r)); f.id = pid; f.seccion = p.seccion; f.guardada = !!d; return f;
 }
 const money = n => '$' + (Math.round(n * 100) / 100).toFixed(2);
 const tieneVida = f => f.vida.ref > 0 || f.vida.con > 0 || f.vida.amb > 0;
@@ -1456,7 +1493,7 @@ const S = {
   orden:{},   // orden personalizado de productos por área {op:[ids]}
   prueba:false,   // MODO PRUEBA: nada se guarda ni mueve inventario (para practicar / capacitar)
 
-  screen:'main', op:opInicial(LSget('op', '')), sound:LSget('sound', true), size:LSget('size', 'n'), zones:false, fichas:{}, listaIds:null, regs:[], imp:(['no','usb'].indexOf(LSget('imp', 'nav')) >= 0 ? LSget('imp', 'nav') : 'nav'),
+  screen:'main', op:opInicial(LSget('op', '')), sound:LSget('sound', true), size:LSget('size', 'n'), zones:false, fichas:{}, mp:[], listaIds:null, regs:[], imp:(['no','usb'].indexOf(LSget('imp', 'nav')) >= 0 ? LSget('imp', 'nav') : 'nav'),
   pid:null, qty:0, mode:'preload', buf:'', modo:'ref', etqOv:null, guard:null, kbd:false, undo:null, ultima:LSget('ultima', {}), fd:null, filtroFalta:false, lt:new Set(), ready:false
 };
 const cur = () => S.pid ? fichaDe(S.pid) : null;
@@ -1821,7 +1858,7 @@ function renderFichasList(){
     '<button class="btn" data-act="pvaciar" style="margin-top:8px;color:#b3261e;border-color:#b3261e">🗑 Vaciar todos los productos de este local</button></div>' +
     '<div id="pr-grid" style="padding:0">' + lista.map(p => {
       const f = fichaDe(p.id), num = prods.indexOf(p) + 1, ms = modosDe(f).map(m => MODOS[m].slice(0, 3) + ' ' + f.vida[m] + 'd').join(' · ') || 'Falta vida útil';
-      return '<button class="card' + (tieneVida(f) ? '' : ' falta') + '" data-act="ficha" data-pid="' + p.id + '">' + phHTML(f) + '<div class="nm"><span class="pnum">' + num + '.</span> ' + esc(f.nombre) + '</div><div class="un">' + esc(ms + (f.precio > 0 ? ' · ' + money(f.precio) : '')) + '</div></button>';
+      return '<button class="card' + (tieneVida(f) ? '' : ' falta') + '" data-act="ficha" data-pid="' + p.id + '">' + phHTML(f) + '<div class="nm"><span class="pnum">' + num + '.</span> ' + esc(f.nombre) + '</div><div class="un">' + esc(ms + (f.precio > 0 ? ' · ' + money(f.precio) : '') + (function(){ const c = costoReceta(f); return c.pct != null ? ' · FC ' + c.pct.toFixed(0) + '%' : ''; })()) + '</div></button>';
     }).join('') + '</div></div>';
 }
 function renderFichaEdit(){
@@ -1838,7 +1875,7 @@ function renderFichaEdit(){
       '<button class="btn sw ' + (p.solo_batch ? 'on' : '') + '" data-act="ftog" data-f="solo_batch"><span>Solo se produce por batch</span><b>' + (p.solo_batch ? 'Sí' : 'No') + '</b></button>' +
       '<button class="btn sw ' + (p.decimales ? 'on' : '') + '" data-act="ftog" data-f="decimales"><span>Permite decimales</span><b>' + (p.decimales ? 'Sí' : 'No') + '</b></button></div>' +
     '<div class="sec"><h3>Precio</h3>' + row('Precio de venta', 'precio', p.precio > 0 ? money(p.precio) : 'No aplica', '') + '<div class="mu small">Si el producto lleva precio, ponlo aquí y saldrá en la etiqueta. Si no, déjalo en «No aplica».</div></div>' +
-    '<div class="sec"><h3>Vida útil</h3>' + row('Refrigerado', 'vida.ref', dm('ref'), '') + row('Congelado', 'vida.con', dm('con'), '') + row('Ambiente', 'vida.amb', dm('amb'), '') +
+    recetaHTML(p) + '<div class="sec"><h3>Vida útil</h3>' + row('Refrigerado', 'vida.ref', dm('ref'), '') + row('Congelado', 'vida.con', dm('con'), '') + row('Ambiente', 'vida.amb', dm('amb'), '') +
       '<div class="mu small">Conservación que aparece primero:</div><div class="modos">' + ['ref', 'con', 'amb'].filter(m => p.vida[m] > 0).map(m => '<button class="btn ' + (p.modo_defecto === m ? 'on' : '') + '" data-act="fdef" data-v="' + m + '">' + MODOS[m] + '</button>').join('') + '</div></div>' +
     '<div class="sec"><button class="btn" data-act="pdel" style="color:#b3261e;border-color:#b3261e">🗑 Eliminar este producto de la lista</button><div class="mu small">Solo se quita de la lista de este local. Lo ya registrado no se borra.</div></div></div>';
 }
@@ -1852,7 +1889,7 @@ function onPhoto(file){
 }
 function guardarFicha(){
   const d = S.fd; if(!d) return; const p = d.draft;
-  const doc = {id:p.id, nombre:p.nombre, presentacion:p.presentacion, unidad:p.unidad, codigo:p.codigo, decimales:p.decimales ? 1 : 0, batch:p.batch, solo_batch:p.solo_batch ? 1 : 0, por_etiqueta:p.por_etiqueta || 0, max:p.max || 0, precio:p.precio > 0 ? round2(p.precio) : 0, modo_defecto:p.modo_defecto, vida:p.vida, foto:p.foto || null};
+  const doc = {id:p.id, nombre:p.nombre, presentacion:p.presentacion, unidad:p.unidad, codigo:p.codigo, decimales:p.decimales ? 1 : 0, batch:p.batch, solo_batch:p.solo_batch ? 1 : 0, por_etiqueta:p.por_etiqueta || 0, max:p.max || 0, precio:p.precio > 0 ? round2(p.precio) : 0, modo_defecto:p.modo_defecto, vida:p.vida, receta:(p.receta || []).filter(r => r.cant > 0).map(r => ({mid:r.mid, nombre:r.nombre, cant:r.cant, u:r.u})), foto:p.foto || null};
   Promise.resolve().then(() => STORE.guardarFicha(doc)).catch(e => { console.error(e); toast('No se pudo guardar la ficha'); });
   S.fichas[p.id] = doc; S.fd = null; S.screen = 'fichas'; render(); toast('Ficha guardada');
 }
@@ -2061,6 +2098,16 @@ function onClick(e){
         onOk:v => { setField(dr, f2, v); if(esDias && dr.vida[dr.modo_defecto] <= 0){ const m = ['ref', 'con', 'amb'].filter(x => dr.vida[x] > 0)[0]; if(m) dr.modo_defecto = m; } render(); }});
       break;
     }
+    case 'rnum': { const dr = S.fd.draft, r = dr.receta[+d.i]; if(!r) break;
+      pedirNumero({titulo:'Cantidad de ' + r.nombre + ' por batch', unidad:r.u, valor:r.cant || '', cero:false, dec:true, onOk:v => { r.cant = v; render(); }}); break; }
+    case 'runi': { const dr = S.fd.draft, r = dr.receta[+d.i], m = r && mpDe(r.mid); if(!r) break; const fam = U_FAM[m ? m.unidad : ''] || [r.u];
+      if(fam.length > 1){ const nu = fam[(fam.indexOf(r.u) + 1) % fam.length]; r.cant = Math.round(r.cant * (U_RB[r.u] || 1) / (U_RB[nu] || 1) * 1000) / 1000; r.u = nu; render(); } break; }
+    case 'rdel': { S.fd.draft.receta.splice(+d.i, 1); render(); break; }
+    case 'radd': { const usados = S.fd.draft.receta.map(r => r.mid), lst = S.mp.filter(m => usados.indexOf(m._id) < 0).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+      openModal('<div class="mt">¿Qué insumo lleva?</div>' + (lst.length ? '<div style="max-height:55vh;overflow:auto;display:flex;flex-direction:column;gap:6px">' + lst.map(m => '<button class="btn" data-act="radd-ok" data-mid="' + esc(m._id) + '" style="text-align:left">' + esc(m.nombre) + ' <span class="mu small">' + (m.precio > 0 ? money(m.precio) + '/' + esc(m.unidad) : 'sin precio') + '</span></button>').join('') + '</div>' : '<div class="mu small" style="text-align:center">No hay materia prima registrada. Créala en Inventario › Panadería › Materia prima.</div>') + '<div class="row"><button class="btn" data-act="mclose" style="flex:1">Cerrar</button></div>'); break; }
+    case 'radd-ok': { const m = mpDe(d.mid); if(!m) break; const fam = U_FAM[m.unidad] || [m.unidad], u = fam[0];
+      S.fd.draft.receta.push({mid:m._id, nombre:m.nombre, cant:0, u:u}); closeModal(); render();
+      pedirNumero({titulo:'Cantidad de ' + m.nombre + ' por batch', unidad:u, valor:'', cero:false, dec:true, onOk:v => { const r = S.fd.draft.receta[S.fd.draft.receta.length - 1]; if(r) r.cant = v; render(); }}); break; }
     case 'kk': kpKey(d.k); break;
     case 'kok': kpOk(); break;
     case 'kcancel': closeModal(); K.o = null; break;
@@ -2082,6 +2129,7 @@ window.PRODREG = {
   setRegistros(arr){ S.regs = (arr || []).concat(S.regs.filter(x => x.prueba)).sort((a, b) => b.ts - a.ts); renderTop(); if(S.screen === 'hoy') render(); },
   setOrden(obj){ S.orden = obj || {}; if(S.screen === 'main') renderGrid(); else if(S.screen === 'fichas') render(); },
   setCatalogo(t, est, etiq){ CAT_LISTO = true; ETIQ = etiq || {}; setEstaciones(est && est.length ? est : EST_BASE); if(OPERADORES.indexOf(S.op) < 0 || BLOQUEADAS.indexOf(S.op) >= 0) S.op = OPERADORES.filter(x => BLOQUEADAS.indexOf(x) < 0)[0] || OPERADORES[0]; CATALOGO_TEXTO = t || ''; leerCatalogo(); if(S.pid && !PROD_ALL.some(x => x.id === S.pid)) S.pid = null; if(S.ready) refrescar(); },
+  setMP(arr){ S.mp = arr || []; if(S.screen === 'ficha' || S.screen === 'fichas') render(); },
   setFichas(obj){ S.fichas = obj || {}; if(S.screen === 'main'){ renderGrid(); renderPanel(); } else if(S.screen === 'fichas') render(); },
   productos(estacion){ return PROD_ALL.filter(p => (estacionDe(estacion).secciones.indexOf(p.seccion) >= 0)).map(p => { const f = fichaDe(p.id); return {id:p.id, nombre:f.nombre, unidad:f.unidad, presentacion:f.presentacion, foto:f.foto}; }); },
   mostrar(){ layout(); refrescar(); },
@@ -2361,7 +2409,7 @@ function showPage(id){
   if(page) page.classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+id));
   document.body.dataset.page=id;
-  if(id==='prod'){suscribirRegistrosProd();setTimeout(()=>PRODREG.mostrar(),30);}
+  if(id==='prod'){try{iniciarPan();panSuscribir();}catch(e){console.error(e);}suscribirRegistrosProd();setTimeout(()=>PRODREG.mostrar(),30);}
   if(id==='equipo') setTimeout(renderEquipo,50);
   if(id==='mant') moAbrirPagina();
   if(id==='guia')   setTimeout(renderGuia,50);
@@ -4103,7 +4151,7 @@ function panGuardar(col,id,data,previo){
 function panSuscribir(){
   if(PAN.unsubs.length)return;const code=panCode(),desde=panDiaAtras(8);
   const por=(col,key,rango)=>onSnapshot(rango?query(collection(db,col),where('dia','>=',desde)):query(collection(db,col),where('local','==',code)),
-    s=>{PAN.real[key]=s.docs.map(d=>({_id:d.id,...d.data()})).filter(x=>x.local===code||x.local===dispositivo.local||!x.local);panMerge();panPintarSiVisible();},e=>console.error(col,e));
+    s=>{PAN.real[key]=s.docs.map(d=>({_id:d.id,...d.data()})).filter(x=>x.local===code||x.local===dispositivo.local||!x.local);panMerge();if(key==='mp'&&window.PRODREG&&PRODREG.setMP)PRODREG.setMP(PAN.real.mp.filter(x=>x.activo!==false));panPintarSiVisible();},e=>console.error(col,e));
   PAN.unsubs=[por('pan_conteos','conteos',1),por('pan_movs','movs',1),por('pan_saldos','saldos',1),por('pan_distrib','dist',1),
     por('pan_mp','mp'),por('pan_mp_mov','mpmov'),por('pan_mp_conteos','mpcont'),
     onSnapshot(query(collection(db,'registros_produccion'),where('dia','>=',desde)),s=>{PAN.d.reg=s.docs.map(d=>d.data()).filter(r=>r.local===code&&estKey(r.area||r.op)===estKey(PAN_AREA));panPintarSiVisible();},e=>console.error('reg',e)),
@@ -4294,7 +4342,7 @@ function panMP(){
   <div class="qrow" style="margin:12px 0"><button class="qchip ${v==='lista'?'sel':''}" data-a="mpv" data-v="lista">📋 Inventario</button><button class="qchip ${v==='salida'?'sel':''}" data-a="mpv" data-v="salida">➖ Salida</button><button class="qchip ${v==='conteo'?'sel':''}" data-a="mpv" data-v="conteo">🔢 Conteo físico</button></div>`;
   if(v==='lista'){
     if(!mp.length)h+=`<div class="card vacio">Aún no hay materias primas. <button class="bt ac" data-a="mp-seed" style="margin-top:10px;width:100%">Cargar lista inicial (harina, azúcar, huevos, queso, levadura, mantequilla)</button></div>`;
-    h+=mp.map(m=>{const c=mpCant(m),[et,cl]=mpEstado(m),u=mpUlt(m);return `<button class="pan-row mpr ${cl}" data-a="mp-ed" data-id="${esc(m._id)}"><div class="pan-n">${esc(m.nombre)}<div class="pan-fx">${esc(m.codigo||'')} · mínimo ${fmtN(m.minimo||0)} ${esc(m.unidad||'')} · último mov.: ${u?fHoraDia(u):'—'}</div></div><div style="text-align:right"><b style="font-size:24px">${fmtN(c)}</b> <small>${esc(m.unidad||'')}</small><div><span class="tag ${cl}">${et}</span></div></div></button>`;}).join('');
+    h+=mp.map(m=>{const c=mpCant(m),[et,cl]=mpEstado(m),u=mpUlt(m);return `<button class="pan-row mpr ${cl}" data-a="mp-ed" data-id="${esc(m._id)}"><div class="pan-n">${esc(m.nombre)}<div class="pan-fx">${esc(m.codigo||'')} · ${m.precio>0?'$'+fmtN(m.precio)+'/'+esc(m.unidad||'')+' · ':'<b style="color:#b3261e">sin precio</b> · '}mínimo ${fmtN(m.minimo||0)} ${esc(m.unidad||'')} · último mov.: ${u?fHoraDia(u):'—'}</div></div><div style="text-align:right"><b style="font-size:24px">${fmtN(c)}</b> <small>${esc(m.unidad||'')}</small><div><span class="tag ${cl}">${et}</span></div></div></button>`;}).join('');
     h+=`<button class="bt" data-a="mp-new" style="width:100%;margin-top:8px">＋ Nueva materia prima</button>`;
     const pend=PAN.d.mpcont.filter(x=>x.estado==='por_revisar');
     if(pend.length)h+=`<div class="lbl" style="margin-top:16px">Diferencias por revisar (${pend.length})</div>`+pend.map(x=>`<div class="pan-row dif"><div class="pan-n">${esc(x.nombre)}<div class="pan-fx">Sistema ${fmtN(x.sistema)} · contado ${fmtN(x.fisico)} <b>(${x.dif>0?'+':''}${fmtN(x.dif)})</b> · ${esc(x.por)} · ${fHoraDia(x.ts)}${x.obs?'<br>“'+esc(x.obs)+'”':''}</div></div><button class="bt wn" data-a="mp-aj" data-id="${esc(x._id)}" style="min-height:52px">Ajustar</button></div>`).join('');
@@ -4321,6 +4369,7 @@ function panMpForm(m){
    <div class="field"><label>Nombre</label><input class="form-control" id="pm-nom" value="${esc(m?m.nombre:'')}" list="pm-cat" autocomplete="off"><datalist id="pm-cat">${CAT.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist></div>
    <div class="np-r"><div class="field"><label>Código</label><input class="form-control" id="pm-cod" value="${esc(m?m.codigo||'':'MP-'+String(PAN.d.mp.length+1).padStart(3,'0'))}"></div>
    <div class="field"><label>Unidad</label><select class="form-control" id="pm-uni">${['kg','g','lb','unidades','litros','ml'].map(u=>`<option ${m&&m.unidad===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
+   <div class="field"><label id="pm-pl">Precio de compra ($ por ${esc(m&&m.unidad||'kg')})</label><input class="form-control" id="pm-precio" inputmode="decimal" placeholder="Ej. 1,80" value="${m&&m.precio>0?fmtN(m.precio):''}"></div>
    <div class="field"><label>Stock mínimo (alerta)</label><input class="form-control" id="pm-min" inputmode="decimal" value="${m?fmtN(m.minimo||0):'0'}"></div>
    <div class="np-b"><button class="bt" data-a="pm-x">Cancelar</button><button class="bt ok" data-a="pm-ok" data-id="${m?esc(m._id):''}">Guardar</button></div>
    ${m?`<button class="mp-del" data-a="pm-off" data-id="${esc(m._id)}">Quitar de la lista (conserva el historial)</button>`:''}`);
@@ -4329,7 +4378,7 @@ function panMpGuardar(id){
   const nom=$('pm-nom').value.trim();if(!nom){showToast('⚠️ Escribe el nombre');return;}
   const idn=id||'mp_'+panNorm(nom).replace(/[^a-z0-9]+/g,'_')+'_'+panCode(),cat=CAT.find(p=>panNorm(p.nombre)===panNorm(nom)),prev=PAN.d.mp.find(m=>m._id===idn);
   if(!id&&prev&&prev.activo!==false){showToast('⚠️ Ya existe esa materia prima');return;}
-  pSet(doc(db,'pan_mp',idn),{local:panCode(),nombre:nom,codigo:$('pm-cod').value.trim(),unidad:$('pm-uni').value,minimo:parseFloat(String($('pm-min').value).replace(',','.'))||0,producto_id:cat?cat.id:(prev&&prev.producto_id)||'',activo:true,actualizado:serverTimestamp(),por:PAN.quien||''},{merge:true}).catch(e=>console.error(e));
+  pSet(doc(db,'pan_mp',idn),{local:panCode(),nombre:nom,codigo:$('pm-cod').value.trim(),unidad:$('pm-uni').value,minimo:parseFloat(String($('pm-min').value).replace(',','.'))||0,precio:parseFloat(String($('pm-precio').value).replace(',','.'))||0,producto_id:cat?cat.id:(prev&&prev.producto_id)||'',activo:true,actualizado:serverTimestamp(),por:PAN.quien||''},{merge:true}).catch(e=>console.error(e));
   panModalCerrar();showToast('✅ Guardado');vib();
 }
 function panMov(tipo,m,cant,extra){
@@ -4400,6 +4449,7 @@ function iniciarPan(){
   const r=$('pan-root');if(!r||r._ok)return;r._ok=1;PAN.tab='pan';
   r.addEventListener('click',panClick);
   r.addEventListener('change',e=>{if(e.target.id==='pan-hsel'){PAN.v.hor.pid=e.target.value;renderPan();}if(e.target.id==='pan-mpsel'){PAN.v.sel=e.target.value;renderPan();}});
+  document.addEventListener('change',e=>{if(e.target&&e.target.id==='pm-uni'&&$('pm-pl'))$('pm-pl').textContent='Precio de compra ($ por '+e.target.value+')';});
   r.addEventListener('input',e=>{if(e.target.classList.contains('mp-obs'))PAN.v.mpo.obs[e.target.dataset.id]=e.target.value;});
   document.addEventListener('click',e=>{if(e.target.closest('#pan-m [data-a]'))panClick(e);});
   $('invh-tabs').addEventListener('click',e=>{const b=e.target.closest('.qchip');if(!b)return;vib();panTab(b.dataset.t);});
@@ -4627,7 +4677,12 @@ const RX_A={
   teclado:(t,ini,uni,cb)=>openKeypad(t,ini,cb,uni),
   codigo:cb=>openKeypad('Código del manager',0,v=>{if(v!==CODIGO_MANAGER){showToast('❌ Código incorrecto');vib([60,40,60]);return;}cb();}),
   badge:n=>{_rxN=n;recBadges();},
-  mp:(pid,nom)=>{try{return mpDe(pid,nom)||null;}catch(e){return null;}}
+  mp:(pid,nom)=>{try{return mpDe(pid,nom)||null;}catch(e){return null;}},
+  mpNuevo:(pid,nom,uni)=>{try{   // el producto pedido aún no está en Materia prima: se crea con lo que se pidió
+    const u=String(uni||'').toLowerCase().trim(),um={kg:'kg',kilo:'kg',kilos:'kg',g:'g',gr:'g',lb:'lb',libra:'lb',libras:'lb',lt:'litros',l:'litros',litro:'litros',litros:'litros',ml:'ml'}[u]||'unidades';
+    const id='mp_'+panNorm(nom).replace(/[^a-z0-9]+/g,'_')+'_'+panCode(),n=(PAN.d.mp||[]).length+1+(PAN.mpNuevos=(PAN.mpNuevos||0)+1)-1;
+    return {_id:id,nombre:nom,codigo:'MP-'+String(n).padStart(3,'0'),unidad:um,nuevo:true,doc:{local:panCode(),nombre:nom,codigo:'MP-'+String(n).padStart(3,'0'),unidad:um,minimo:0,precio:0,producto_id:pid||'',activo:true,actualizado:serverTimestamp(),por:'recepción'}};
+  }catch(e){return null;}}
 };
 (function(A, db){
 'use strict';
@@ -4756,7 +4811,7 @@ function guardar(ya){
 function abrirBorrador(id){
   const r = R.nw[id]; if(!r) return;
   R.id = id; R.d = JSON.parse(JSON.stringify(r)); delete R.d.id; delete R.d.fecha_actividad; delete R.d.fecha_creacion; delete R.d.paso;
-  R.d.fecha_creacion = true; R.step = Math.max(1, Math.min(4, r.paso || (r.items && r.items.length ? 2 : 1))); R.tab = 'nueva'; R.q = '';
+  R.d.fecha_creacion = true; R.step = Math.max(1, Math.min(4, (r.paso > 1 ? r.paso : 0) || (r.items && r.items.length ? 2 : 1))); R.tab = 'nueva'; R.q = '';
   render(); window.scrollTo(0, 0);
 }
 function salir(){
@@ -4847,7 +4902,8 @@ function ppEnviar(d, prov, wa){
   const nOrd = (d.n_orden || 0) + 1, codigo = 'OP-' + (d.numero || '0') + '-' + nOrd, fEnt = d.fecha_entrega || ppManana();
   if(wa){
     const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
-    const msg = '*ORDEN DE PEDIDO N.º ' + codigo + '*\nMorochos Coffee · ' + A.localNombre() + '\n\n' + lineas + '\n\n*Fecha de entrega:* ' + ppFechaLarga(fEnt) + '\n\nFavor confirmar la recepción de esta orden.';
+    const est = d.estacion || (its[0] && its[0].categoria) || '';
+    const msg = '*' + prov + '*\n' + (d.numero ? 'Pedido #P' + d.numero : 'Pedido') + (est ? ' · *' + est + '*' : '') + '\nFecha: ' + new Date().toLocaleDateString('es-EC') + '\n\n' + lineas + '\n\n*Entrega:* ' + ppFechaLarga(fEnt);
     window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
   }
   const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
@@ -4855,7 +4911,7 @@ function ppEnviar(d, prov, wa){
   idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; d.items[k].orden = codigo; }); d.n_orden = nOrd;
   const todo = d.items.every(i => i.enviado); d.estado = todo ? 'enviado' : 'por_pedir';
   db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado, n_orden:nOrd, fecha_entrega:fEnt}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
-  toast('✅ Orden ' + codigo + ' registrada · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
+  toast('✅ Pedido a ' + prov + ' registrado · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
 }
 function vProvs(){
   const pv = PL.sel && plProv(PL.sel);
@@ -4965,8 +5021,9 @@ function itemCard(it, i){
 }
 function vProductos(){
   const d = R.d;
-  return '<div class="rx-card"><div class="rx-ph"><b>' + esc(d.proveedor) + '</b><span class="rx-mu">' + d.items.length + ' producto' + (d.items.length === 1 ? '' : 's') + '</span></div></div>' +
+  return '<div class="rx-mu" style="margin:2px 2px 8px">' + d.items.length + ' producto' + (d.items.length === 1 ? '' : 's') + '</div>' +
     '<div class="rx-items">' + d.items.map(itemCard).join('') + '</div>' +
+    '<div class="rx-card"><div class="rx-ph"><span class="rx-mu">Proveedor</span><b>' + esc(d.proveedor) + '</b></div></div>' +
     '<button class="rx-b ac big" data-rx="add-abrir">＋ Agregar producto</button>' +
     (d.items.length ? '' : '<div class="rx-mu c">Agrega lo que llegó. Si coincide con la factura, toca ✔ Todo correcto.</div>');
 }
@@ -4996,14 +5053,14 @@ function vPrec(){
   const l = porRecibir();
   if(!l.length && borradores().length) return vPend();
   if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
-  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b style="font-size:16px">' + ((r.items || []).slice(0, 4).map(i => esc(i.nombre)).join(', ') || 'Pedido') + ((r.items || []).length > 4 ? '…' : '') + '</b><div class="rx-mu">' + (r.items || []).length + ' producto' + ((r.items || []).length === 1 ? '' : 's') + '</div><div class="rx-mu">Proveedor: <b>' + esc(r.proveedor || '—') + '</b></div><div class="rx-mu">' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + ' · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.orden_codigo ? '<div class="rx-mu">Orden ' + esc(r.orden_codigo) + (r.fecha_entrega ? ' · Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) : '') + '</div>' : '') + '<span class="rx-b ac" style="margin-top:8px">' + (r.paso > 1 ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
+  return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b style="font-size:16px">' + esc(r.proveedor || 'Pedido') + '</b>' + '<div class="rx-mu">' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + '<b>' + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b> · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.fecha_entrega ? '<div class="rx-mu">Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) + '</div>' : '') + '<span class="rx-b ac" style="margin-top:8px">' + ((r.items || []).some(i => i.revisado) ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
     '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
   const r = R.nw[id]; if(!r) return;
   R.id = id; R.d = JSON.parse(JSON.stringify(r)); delete R.d.id; delete R.d.fecha_actividad; delete R.d.fecha_creacion; delete R.d.paso;
   R.d.fecha_creacion = true; R.d.historial = (R.d.historial || []).concat([hist('abierta desde Por recibir')]);   // sigue como «por_recibir» hasta confirmar: si no la terminas, se queda en su lugar
-  R.step = 1; R.tab = 'nueva'; R.q = ''; guardar(true); render(); window.scrollTo(0, 0);
+  R.step = (r.paso > 1 ? r.paso : 0) || (r.items && r.items.length ? 2 : 1); R.tab = 'nueva'; R.q = ''; guardar(true); render(); window.scrollTo(0, 0);   // primero los productos, después el proveedor
 }
 
 /* ---- Historial ---- */
@@ -5142,7 +5199,8 @@ function aInv(t, recId, it, d, ts, area){
   t.set(db.collection('movimientos_inventario_estacion').doc(recId + '_' + pid), {local:code, estacion:lab, estacion_key:ek, producto_id:pid, producto_nombre:it.nombre, tipo:'recepcion_proveedor', cantidad:it.aceptado, unidad:it.unidad, recepcion_id:recId, proveedor:d.proveedor, documento:d.documento || '',
     lote_proveedor:it.lote_proveedor || null, vence:it.vence || null, peso_kg:it.peso_kg || null, temperatura_c:it.temperatura_c != null ? it.temperatura_c : null, nota_item:it.nota_item || '', responsable:d.responsable || R.resp || '', fecha:ts,
     nota:'Recepción de ' + d.proveedor + (it.lote_proveedor ? ' · Lote ' + it.lote_proveedor : '') + (it.vence ? ' · Vence ' + it.vence : '')});
-  const mp = ek === 'panaderia-produccion' ? A.mp(pid, it.nombre) : null;   // materia prima de panadería: alimenta también Inventario → Panadería → Materia prima
+  const mp = ek === 'panaderia-produccion' ? (A.mp(pid, it.nombre) || A.mpNuevo(pid, it.nombre, it.unidad)) : null;
+  if(mp && mp.nuevo) t.set(db.collection('pan_mp').doc(mp._id), mp.doc, {merge:true});   // materia prima de panadería: alimenta también Inventario → Panadería → Materia prima
   if(mp){ const mid = 'rcp__' + recId + '__' + pid;
     t.set(db.collection('pan_mp_mov').doc(mid), {id:mid, local:code, local_nombre:A.localNombre(), dia:A.hoy(), ts:Date.now(), fecha:ts, hora:new Date().toLocaleTimeString('es-EC', {hour:'2-digit', minute:'2-digit'}), tipo:'entrada_recepcion', mp_id:mp._id, nombre:mp.nombre, codigo:mp.codigo || '', unidad:mp.unidad || '',
       unidad_recibida:it.unidad || '', cantidad:it.aceptado, recepcion_id:recId, proveedor:d.proveedor, por:d.responsable || R.resp || '', anulado:false, receta_id:null, producto_destino_id:null}); }
