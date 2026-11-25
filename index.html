@@ -4885,7 +4885,7 @@ function vPedirDet(d){
   else Object.keys(grupos).forEach(pr => {
     h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
       ((PL.wa && PL.wa[d.id + '|' + pr]) ?
-        '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que confirmes que lo enviaste.</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo envié</button></div></div>' :
+        '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que toques «✓ Pedido».</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Pedido</button></div></div>' :
         '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>');
   });
   return h;
@@ -5068,7 +5068,7 @@ function vPrec(){
   if(!l.length && borradores().length) return vPend();
   if(!l.length) return '<div class="rx-vacio">No hay pedidos por recibir.<br><span class="rx-mu">Aquí aparecen los pedidos que ya enviaste a tus proveedores.</span></div>';
   return '<div class="rx-list rx-uno">' + l.map(r => '<div class="rx-row"><button class="rx-rb" data-rx="prec-open" data-id="' + esc(r.id) + '"><b style="font-size:16px">' + esc(r.proveedor || 'Pedido') + '</b>' + '<div class="rx-mu">' + (r.pedido_numero ? '#' + esc(r.pedido_numero) + ' · ' : '') + '<b>' + esc(r.pedido_estacion || areaNom(r.destino) || 'Pedido') + '</b> · ' + esc(fechaDia(r.fecha_actividad)) + '</div>' + (r.fecha_entrega ? '<div class="rx-mu">Entrega: ' + esc(ppFechaLarga(r.fecha_entrega)) + '</div>' : '') + '<span class="rx-b ac" style="margin-top:8px">' + ((r.items || []).some(i => i.revisado) ? 'Continuar ›' : 'Recibir ›') + '</span></button>' +
-    '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
+    '<button class="rx-del" data-rx="prec-del" data-id="' + esc(r.id) + '">' + (R.delOk === r.id ? '¿Borrar?' : '🗑') + '</button></div>').join('') + '</div><button class="rx-b" data-rx="prec-delall" style="margin-top:12px;width:100%">🗑 Borrar todas las órdenes por recibir (' + l.length + ')</button>' + (borradores().length ? '<div style="height:8px"></div>' + vPend() : '');
 }
 function abrirPorRecibir(id){
   const r = R.nw[id]; if(!r) return;
@@ -5366,6 +5366,7 @@ function onClick(e){
     case 'confirmar': confirmar(); break;
     case 'pend-open': abrirBorrador(id); break;
     case 'prec-open': abrirPorRecibir(id); break;
+    case 'prec-delall': { const l = porRecibir(); if(!l.length) break; A.codigo(() => { if(!confirm('¿Borrar las ' + l.length + ' órdenes por recibir? No se pueden recuperar. Las ya recibidas no se tocan.')) return; l.forEach(r => descartar(r.id)); toast('🗑 ' + l.length + ' órdenes borradas'); }); break; }
     case 'prec-del': if(!rxAdm()){ A.codigo(() => descartar(id)); break; } if(R.delOk === id){ descartar(id); } else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
     case 'pend-del': if(!rxAdm()){ A.codigo(() => descartar(id)); break; } if(R.delOk === id) descartar(id); else { R.delOk = id; render(); setTimeout(() => { if(R.delOk === id){ R.delOk = null; if(!R.d && !R.det) render(); } }, 4000); } break;
     case 'filtro': R.filtro = v; render(); break;
