@@ -4848,6 +4848,7 @@ function render(){
 /* ---- Proveedores: registrar proveedores (actuales y futuros) y los productos que nos proveen ---- */
 const PL = {sub:'pedir', pp:null, sel:null, q:'', pick:false, pq:'', nuevo:false};
 const plProv = id => R.provs.filter(p => p.id === id)[0];
+const plDr = pv => (PL.dr && PL.dr.id === pv.id) ? PL.dr : (PL.dr = {id:pv.id, nom:pv.nombre, tel:pv.telefono || '', prods:(Array.isArray(pv.productos_lista) ? pv.productos_lista : []).slice(), dirty:false, ok:false});
 const plProds = p => Array.isArray(p && p.productos_lista) ? p.productos_lista : [];
 function plGate(cb){ if(rxAdm()) cb(); else A.codigo(() => { R.admHasta = Date.now() + 10 * 60000; cb(); }); }
 function plGuardarProds(id, lista){ db.collection('proveedores_os').doc(id).set({productos_lista:lista}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }
@@ -4883,7 +4884,9 @@ function vPedirDet(d){
   if(faltan) h += '<div class="rx-mu c">Elige el proveedor de los ' + faltan + ' producto' + (faltan === 1 ? '' : 's') + ' que faltan para poder enviar el pedido.</div>';
   else Object.keys(grupos).forEach(pr => {
     h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
-      '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>';
+      ((PL.wa && PL.wa[d.id + '|' + pr]) ?
+        '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que confirmes que lo enviaste.</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo envié</button></div></div>' :
+        '<div class="rx-two" style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Enviar por WhatsApp</button><button class="rx-b" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Ya lo pedí</button></div></div>');
   });
   return h;
 }
@@ -4896,16 +4899,20 @@ function ppTel(nombre){
 function ppSet(d, k, v){
   d.items[k].proveedor = v; db.collection('pedir_proveedores').doc(d.id).set({items:d.items}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); render();
 }
-function ppEnviar(d, prov, wa){
+function ppWa(d, prov){   // solo abre WhatsApp: el pedido NO se registra hasta que ella confirme «Ya lo envié»
+  const its = (d.items || []).filter(it => !it.enviado && ppProvDe(it) === prov); if(!its.length) return;
+  const fEnt = d.fecha_entrega || ppManana();
+  const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
+  const est = d.estacion || (its[0] && its[0].categoria) || '';
+  const msg = '*' + prov + '*\n' + (d.numero ? 'Pedido #P' + d.numero : 'Pedido') + (est ? ' · *' + est + '*' : '') + '\nFecha: ' + new Date().toLocaleDateString('es-EC') + '\n\n' + lineas + '\n\n*Entrega:* ' + ppFechaLarga(fEnt);
+  PL.wa = PL.wa || {}; PL.wa[d.id + '|' + prov] = true;
+  window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank'); render();
+}
+function ppEnviar(d, prov){
   const idx = []; (d.items || []).forEach((it, k) => { if(!it.enviado && ppProvDe(it) === prov) idx.push(k); }); if(!idx.length) return;
   const its = idx.map(k => d.items[k]);
   const nOrd = (d.n_orden || 0) + 1, codigo = 'OP-' + (d.numero || '0') + '-' + nOrd, fEnt = d.fecha_entrega || ppManana();
-  if(wa){
-    const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
-    const est = d.estacion || (its[0] && its[0].categoria) || '';
-    const msg = '*' + prov + '*\n' + (d.numero ? 'Pedido #P' + d.numero : 'Pedido') + (est ? ' · *' + est + '*' : '') + '\nFecha: ' + new Date().toLocaleDateString('es-EC') + '\n\n' + lineas + '\n\n*Entrega:* ' + ppFechaLarga(fEnt);
-    window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank');
-  }
+  if(PL.wa) delete PL.wa[d.id + '|' + prov];
   const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
   db.collection('recepciones_bodega').doc('pp_' + d.id + '_' + slug(prov) + '_' + Date.now()).set(rec).catch(er => { console.error(er); toast(errTxt(er)); });
   idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; d.items[k].orden = codigo; }); d.n_orden = nOrd;
@@ -4916,10 +4923,10 @@ function ppEnviar(d, prov, wa){
 function vProvs(){
   const pv = PL.sel && plProv(PL.sel);
   if(pv){
-    const pr = plProds(pv), ya = pr.map(x => x.id);
+    const dr = plDr(pv), pr = dr.prods, ya = pr.map(x => x.id);
     let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pl-back">← Proveedores</button><div class="rx-tt">' + esc(pv.nombre) + '</div><span></span></div>';
-    h += '<div class="rx-card"><h3>Nombre del proveedor</h3><input class="rx-in" id="pl-nom" autocomplete="off" value="' + esc(pv.nombre) + '"></div>';
-    h += '<div class="rx-card"><h3>WhatsApp del proveedor</h3><input class="rx-in" id="pl-tel" type="tel" inputmode="tel" placeholder="Ej. 0991234567" autocomplete="off" value="' + esc(pv.telefono || '') + '"><div class="rx-mu">Con este número se abre el WhatsApp al pedir.</div></div>';
+    h += '<div class="rx-card"><h3>Nombre del proveedor</h3><input class="rx-in" id="pl-nom" autocomplete="off" value="' + esc(dr.nom) + '"></div>';
+    h += '<div class="rx-card"><h3>WhatsApp del proveedor</h3><input class="rx-in" id="pl-tel" type="tel" inputmode="tel" placeholder="Ej. 0991234567" autocomplete="off" value="' + esc(dr.tel) + '"><div class="rx-mu">Con este número se abre el WhatsApp al pedir.</div></div>';
     h += '<div class="rx-card"><h3>Productos que nos provee <span class="rx-mu">(' + pr.length + ')</span></h3>' +
       (pr.length ? pr.map((x, k) => '<div class="rx-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee"><span>' + esc(x.nombre) + ' <small class="rx-mu">' + esc(x.unidad || '') + '</small></span><button class="rx-b sm" data-rx="pl-pdel" data-i="' + k + '">✕</button></div>').join('') : '<div class="rx-mu c">Aún no hay productos. Agrega los que te vende este proveedor.</div>') + '</div>';
     if(PL.pick){
@@ -4930,6 +4937,7 @@ function vProvs(){
         '<div class="rx-pl" style="margin-top:8px">' + (lst.length ? lst.map(it => '<button class="rx-pi ' + (ya.indexOf(it.id) >= 0 ? 'hecho' : '') + '" data-rx="pl-ppick" data-id="' + esc(it.id) + '"><span>' + esc(it.nombre) + ' <small>' + esc(it.uCompra || it.uAlmacen || it.unidad || '') + '</small></span>' + (ya.indexOf(it.id) >= 0 ? '<b>✓</b>' : '') + '</button>').join('') : '<div class="rx-mu">Sin resultados.</div>') + '</div>' +
         '<button class="rx-b ok big" data-rx="pl-pfin" style="margin-top:10px">Listo</button></div>';
     } else h += '<button class="rx-b ok big" data-rx="pl-padd">＋ Agregar productos</button>';
+    h += '<div style="position:sticky;bottom:0;background:#fff;padding:10px 0;margin-top:10px;border-top:1px solid #eee"><div id="pl-st" class="rx-mu c" style="margin-bottom:6px;' + (dr.dirty ? 'color:#b45309">● Cambios sin guardar' : dr.ok ? 'color:#15803d">✔ Guardado' : '">Sin cambios') + '</div><button class="rx-b ok big" data-rx="pl-save" style="width:100%">💾 Guardar cambios</button></div>';
     h += '<button class="rx-b" data-rx="pl-del" style="margin-top:14px">🗑 Eliminar proveedor</button>';
     return h;
   }
@@ -4943,27 +4951,33 @@ function vProvs(){
 function plEvento(a, id, i, t0){
   const pv = PL.sel && plProv(PL.sel);
   switch(a){
-    case 'pl-open': { if(!plProv(id)){ const nom = t0.getAttribute('data-n') || id; db.collection('proveedores_os').doc(id).set({nombre:nom, telefono:'', productos_lista:[], creado:SV()}, {merge:true}).catch(er => console.error(er)); R.provs.push({id:id, nombre:nom, telefono:'', productos_lista:[]}); } PL.sel = id; PL.pick = false; PL.pq = ''; render(); window.scrollTo(0, 0); break; }
-    case 'pl-back': PL.sel = null; PL.pick = false; render(); break;
+    case 'pl-open': { if(!plProv(id)){ const nom = t0.getAttribute('data-n') || id; db.collection('proveedores_os').doc(id).set({nombre:nom, telefono:'', productos_lista:[], creado:SV()}, {merge:true}).catch(er => console.error(er)); R.provs.push({id:id, nombre:nom, telefono:'', productos_lista:[]}); } PL.sel = id; PL.dr = null; PL.pick = false; PL.pq = ''; render(); window.scrollTo(0, 0); break; }
+    case 'pl-back': if(PL.dr && PL.dr.dirty && !confirm('Tienes cambios sin guardar. ¿Salir sin guardar?')) break; PL.sel = null; PL.dr = null; PL.pick = false; render(); break;
     case 'pl-new': PL.nuevo = true; render(); break;
     case 'pl-cancel': PL.nuevo = false; render(); break;
     case 'pl-add': { const nom = (($('#pl-nn') || {}).value || '').trim(), tel = (($('#pl-nt') || {}).value || '').trim(); if(!nom){ toast('Escribe el nombre del proveedor'); break; }
       if(R.provs.some(x => norm(x.nombre) === norm(nom))){ toast('Ese proveedor ya existe'); break; }
-      plGate(() => { const pid = 'prov_' + slug(nom); db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:tel, productos_lista:[], eliminado:false, creado:SV()}, {merge:true}).then(() => toast('Proveedor agregado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); if(!plProv(pid)) R.provs.push({id:pid, nombre:nom, telefono:tel, productos_lista:[]}); R.provsEli = R.provsEli.filter(x => x !== norm(nom)); PL.nuevo = false; PL.q = ''; PL.sel = pid; PL.pick = false; PL.pq = ''; render(); }); break; }
+      plGate(() => { const pid = 'prov_' + slug(nom); db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:tel, productos_lista:[], eliminado:false, creado:SV()}, {merge:true}).then(() => toast('Proveedor agregado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); if(!plProv(pid)) R.provs.push({id:pid, nombre:nom, telefono:tel, productos_lista:[]}); R.provsEli = R.provsEli.filter(x => x !== norm(nom)); PL.nuevo = false; PL.q = ''; PL.sel = pid; PL.dr = null; PL.pick = false; PL.pq = ''; render(); }); break; }
     case 'pl-padd': PL.pick = true; PL.pq = ''; R.noFocus = true; render(); break;
     case 'pl-pfin': PL.pick = false; PL.pq = ''; render(); break;
-    case 'pl-ppick': if(!pv) break; plGate(() => { const it = cat().filter(x => x.id === id)[0]; if(!it) return; const l = plProds(pv).slice(), k = l.findIndex(x => x.id === id); if(k >= 0) l.splice(k, 1); else l.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); R.noFocus = true; render(); }); break;
-    case 'pl-pnew': { if(!pv) break; const nom = PL.pq.trim(); if(!nom) break; plGate(() => { const l = plProds(pv).slice(); if(!l.some(x => norm(x.nombre) === norm(nom))) l.push({id:'n_' + slug(nom), nombre:nom, unidad:'unidades'}); pv.productos_lista = l; plGuardarProds(pv.id, l); PL.pq = ''; render(); }); break; }
-    case 'pl-pdel': if(!pv) break; plGate(() => { const l = plProds(pv).slice(); l.splice(i, 1); pv.productos_lista = l; plGuardarProds(pv.id, l); render(); }); break;
-    case 'pl-del': if(!pv) break; plGate(() => { if(!confirm('¿Eliminar a ' + pv.nombre + '? Las recepciones ya hechas no se borran.')) return; db.collection('proveedores_os').doc(pv.id).set({eliminado:true, nombre:pv.nombre}, {merge:true}).then(() => toast('Proveedor eliminado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); R.provs = R.provs.filter(x => x.id !== pv.id); R.provsEli.push(norm(pv.nombre)); PL.sel = null; render(); }); break;
+    case 'pl-ppick': { if(!pv) break; const dr = plDr(pv), it = cat().filter(x => x.id === id)[0]; if(!it) break; const k = dr.prods.findIndex(x => x.id === id); if(k >= 0) dr.prods.splice(k, 1); else dr.prods.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); dr.dirty = true; dr.ok = false; R.noFocus = true; render(); break; }
+    case 'pl-pnew': { if(!pv) break; const nom = PL.pq.trim(); if(!nom) break; const dr = plDr(pv); if(!dr.prods.some(x => norm(x.nombre) === norm(nom))) dr.prods.push({id:'n_' + slug(nom), nombre:nom, unidad:'unidades'}); dr.dirty = true; dr.ok = false; PL.pq = ''; render(); break; }
+    case 'pl-pdel': { if(!pv) break; const dr = plDr(pv); dr.prods.splice(i, 1); dr.dirty = true; dr.ok = false; render(); break; }
+    case 'pl-save': { if(!pv) break; const dr = plDr(pv), nom = String((($('#pl-nom') || {}).value != null ? $('#pl-nom').value : dr.nom)).trim(), tel = String((($('#pl-tel') || {}).value != null ? $('#pl-tel').value : dr.tel)).trim();
+      if(!nom){ toast('Escribe el nombre del proveedor'); break; }
+      if(R.provs.some(o => o.id !== pv.id && norm(o.nombre) === norm(nom))){ toast('Ese nombre ya existe'); break; }
+      plGate(() => { const data = {nombre:nom, telefono:tel, productos_lista:dr.prods, eliminado:false}, cambioNom = nom !== pv.nombre; let ant = pv.anteriores || []; if(cambioNom){ ant = ant.concat([pv.nombre]); data.anteriores = ant; }
+        db.collection('proveedores_os').doc(pv.id).set(data, {merge:true}).then(() => { if(cambioNom){ if(norm(pv.nombre) !== norm(nom)) R.provsEli.push(norm(pv.nombre)); pv.anteriores = ant; } pv.nombre = nom; pv.telefono = tel; pv.productos_lista = dr.prods.slice(); dr.nom = nom; dr.tel = tel; dr.dirty = false; dr.ok = true; toast('✅ Proveedor guardado'); render(); })
+          .catch(er => { console.error(er); toast('❌ No se pudo guardar (revisa la conexión)'); }); }); break; }
+    case 'pl-del': if(!pv) break; plGate(() => { if(!confirm('¿Eliminar a ' + pv.nombre + '? Las recepciones ya hechas no se borran.')) return; db.collection('proveedores_os').doc(pv.id).set({eliminado:true, nombre:pv.nombre}, {merge:true}).then(() => toast('Proveedor eliminado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); R.provs = R.provs.filter(x => x.id !== pv.id); R.provsEli.push(norm(pv.nombre)); PL.sel = null; PL.dr = null; render(); }); break;
   }
 }
 
 /* ---- Nueva: elegir proveedor (paso 1 del flujo) ---- */
 function provsFrecuentes(){
   const c = {}; todas().forEach(r => { const n = String(r.proveedor || '').trim(); if(n && estadoDe(r) !== 'anulada') c[n] = (c[n] || 0) + 1; });
-  const nombres = R.provs.map(p => p.nombre);
-  Object.keys(c).forEach(n => { if(nombres.indexOf(n) < 0 && R.provsEli.indexOf(norm(n)) < 0) nombres.push(n); });
+  const nombres = R.provs.map(p => p.nombre), vis = nombres.map(norm);
+  Object.keys(c).forEach(n => { const k = norm(n); if(vis.indexOf(k) < 0 && R.provsEli.indexOf(k) < 0){ nombres.push(n); vis.push(k); } });
   return nombres.sort((a, b) => (c[b] || 0) - (c[a] || 0) || String(a).localeCompare(String(b)));
 }
 function vProveedor(){
@@ -5310,8 +5324,8 @@ function onClick(e){
     case 'pl-sub': PL.sub = v; R.tab = v === 'hist' ? 'hist' : 'prec'; PL.pp = null; PL.sel = null; PL.pick = false; render(); window.scrollTo(0, 0); break;
     case 'pp-open': PL.pp = id; render(); window.scrollTo(0, 0); break;
     case 'pp-back': PL.pp = null; render(); break;
-    case 'pp-wa': case 'pp-ok': { const dd = R.pp.filter(x => x.id === PL.pp)[0]; if(dd) ppEnviar(dd, v, a === 'pp-wa'); break; }
-    case 'pl-new': case 'pl-cancel': case 'pl-open': case 'pl-back': case 'pl-add': case 'pl-padd': case 'pl-pfin': case 'pl-ppick': case 'pl-pnew': case 'pl-pdel': case 'pl-del': plEvento(a, id, i, t); break;
+    case 'pp-wa': case 'pp-ok': { const dd = R.pp.filter(x => x.id === PL.pp)[0]; if(dd){ if(a === 'pp-wa') ppWa(dd, v); else ppEnviar(dd, v); } break; }
+    case 'pl-new': case 'pl-cancel': case 'pl-open': case 'pl-back': case 'pl-add': case 'pl-padd': case 'pl-pfin': case 'pl-ppick': case 'pl-pnew': case 'pl-pdel': case 'pl-del': case 'pl-save': plEvento(a, id, i, t); break;
     case 'salir': salir(); break;
     case 'step': if(d){ if(n > R.step && !paso1ok(n)) break; R.step = n; guardar(); render(); window.scrollTo(0, 0); } break;
     case 'atras': R.step = Math.max(1, R.step - 1); guardar(); render(); window.scrollTo(0, 0); break;
@@ -5385,8 +5399,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => { const x = e.target;
   if(x && x.id === 'pp-fecha' && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(dd && x.value){ dd.fecha_entrega = x.value; db.collection('pedir_proveedores').doc(dd.id).set({fecha_entrega:x.value}, {merge:true}).catch(er => console.error(er)); R.noFocus = true; render(); } return; }
-  if(x && x.id === 'pl-nom' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val && val !== pv.nombre) plGate(() => { if(R.provs.some(o => o.id !== pv.id && norm(o.nombre) === norm(val))){ toast('Ese nombre ya existe'); render(); return; } const ant = (pv.anteriores || []).concat([pv.nombre]); R.provsEli.push(norm(pv.nombre)); pv.anteriores = ant; pv.nombre = val; db.collection('proveedores_os').doc(pv.id).set({nombre:val, anteriores:ant}, {merge:true}).then(() => toast('Nombre guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); render(); }); else if(pv) x.value = pv.nombre; return; }
-  if(x && x.id === 'pl-tel' && PL.sel){ const pv = plProv(PL.sel), val = x.value.trim(); if(pv && val !== (pv.telefono || '')) plGate(() => { pv.telefono = val; db.collection('proveedores_os').doc(pv.id).set({telefono:val}, {merge:true}).then(() => toast('Número guardado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }); return; }
+  if(x && (x.id === 'pl-nom' || x.id === 'pl-tel') && PL.sel){ const pv = plProv(PL.sel); if(pv){ const dr = plDr(pv); if(x.id === 'pl-nom') dr.nom = x.value; else dr.tel = x.value; dr.dirty = true; dr.ok = false; const st = document.getElementById('pl-st'); if(st){ st.style.color = '#b45309'; st.textContent = '● Cambios sin guardar'; } } return; }
   if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(!dd) return; const k = +x.getAttribute('data-pp');
     if(x.value === '__nuevo'){ const nom = (window.prompt('Nombre del proveedor nuevo:') || '').trim(); if(!nom){ render(); return; } const pid = 'prov_' + slug(nom);
       if(!plProv(pid)){ db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:'', productos_lista:[], creado:SV()}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); R.provs.push({id:pid, nombre:nom, telefono:'', productos_lista:[]}); }
