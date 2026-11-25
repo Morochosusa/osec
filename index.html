@@ -4848,7 +4848,9 @@ function render(){
 /* ---- Proveedores: registrar proveedores (actuales y futuros) y los productos que nos proveen ---- */
 const PL = {sub:'pedir', pp:null, sel:null, q:'', pick:false, pq:'', nuevo:false};
 const plProv = id => R.provs.filter(p => p.id === id)[0];
-const plDr = pv => (PL.dr && PL.dr.id === pv.id) ? PL.dr : (PL.dr = {id:pv.id, nom:pv.nombre, tel:pv.telefono || '', prods:(Array.isArray(pv.productos_lista) ? pv.productos_lista : []).slice(), dirty:false, ok:false});
+const plDr = pv => { if(PL.dr && PL.dr.id === pv.id) return PL.dr; const raw = Array.isArray(pv.productos_lista) ? pv.productos_lista : [], vistos = {}, lim = [];
+  raw.forEach(x => { const k = norm(x.nombre); if(!vistos[k]){ vistos[k] = 1; lim.push(x); } });
+  return (PL.dr = {id:pv.id, nom:pv.nombre, tel:pv.telefono || '', prods:lim, dirty:lim.length !== raw.length, ok:false, quitados:raw.length - lim.length}); };
 const plProds = p => Array.isArray(p && p.productos_lista) ? p.productos_lista : [];
 function plGate(cb){ if(rxAdm()) cb(); else A.codigo(() => { R.admHasta = Date.now() + 10 * 60000; cb(); }); }
 function plGuardarProds(id, lista){ db.collection('proveedores_os').doc(id).set({productos_lista:lista}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); }
@@ -4867,12 +4869,12 @@ function vPedir(){
   PL.pp = null;
   const l = ppPend();
   if(!l.length) return '<div class="rx-vacio">No hay nada por pedir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando el encargado aprueba la lista.</span></div>';
-  return '<div class="rx-list rx-uno">' + l.map(r => { const n = (r.items || []).filter(i => !i.enviado).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' por pedir</div><div class="rx-mu">' + (r.items || []).filter(i => !i.enviado).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
+  return '<div class="rx-list rx-uno">' + l.map(r => { const n = (r.items || []).filter(i => !i.enviado).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' por pedir</div>' + (r.fecha_ms ? '<div class="rx-mu">🕒 ' + ppFH(r.fecha_ms) + '</div>' : '') + '<div class="rx-mu">' + (r.items || []).filter(i => !i.enviado).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
 }
 function vPedirDet(d){
   const items = d.items || [], nombres = provsFrecuentes().slice().sort((x, y) => String(x).localeCompare(String(y))), grupos = {};   // registrados + los de recepciones anteriores
   let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pp-back">← Por pedir</button><div class="rx-tt">' + (d.numero ? '#' + esc(d.numero) + ' · ' : '') + esc(d.estacion || 'Lista') + '</div><span></span></div>';
-  h += '<div class="rx-card"><h3>Fecha de entrega</h3><input class="rx-in" id="pp-fecha" type="date" value="' + esc(d.fecha_entrega || ppManana()) + '"><div class="rx-mu">' + esc(ppFechaLarga(d.fecha_entrega || ppManana())) + '</div></div>';
+  h += '' + (d.fecha_ms ? '<div class="rx-mu c">Pedido recibido: ' + ppFH(d.fecha_ms) + '</div>' : '') + '<div class="rx-card"><h3>Fecha de entrega</h3><input class="rx-in" id="pp-fecha" type="date" value="' + esc(d.fecha_entrega || ppManana()) + '"><div class="rx-mu">' + esc(ppFechaLarga(d.fecha_entrega || ppManana())) + '</div></div>';
   h += '<div class="rx-card"><h3>¿A quién se lo pides?</h3>' + (nombres.length ? '' : '<div class="rx-mu">Primero registra tus proveedores en la pestaña «Lista».</div>') +
     items.map((it, k) => {
       if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + (k + 1) + '. ' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
@@ -4890,6 +4892,7 @@ function vPedirDet(d){
   });
   return h;
 }
+const ppFH = ms => { if(!ms) return ''; const d = new Date(ms); return d.toLocaleDateString('es-EC') + ' · ' + d.toLocaleTimeString('es-EC', {hour:'2-digit', minute:'2-digit', hour12:true}); };
 const ppManana = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const ppFechaLarga = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if(!m) return ''; const t = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-EC', {weekday:'long', day:'numeric', month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); };
 function ppTel(nombre){
@@ -4923,21 +4926,21 @@ function ppEnviar(d, prov){
 function vProvs(){
   const pv = PL.sel && plProv(PL.sel);
   if(pv){
-    const dr = plDr(pv), pr = dr.prods, ya = pr.map(x => x.id);
+    const dr = plDr(pv), pr = dr.prods, ya = pr.map(x => x.id), yaN = pr.map(x => norm(x.nombre));
     let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pl-back">← Proveedores</button><div class="rx-tt">' + esc(pv.nombre) + '</div><span></span></div>';
     h += '<div class="rx-card"><h3>Nombre del proveedor</h3><input class="rx-in" id="pl-nom" autocomplete="off" value="' + esc(dr.nom) + '"></div>';
     h += '<div class="rx-card"><h3>WhatsApp del proveedor</h3><input class="rx-in" id="pl-tel" type="tel" inputmode="tel" placeholder="Ej. 0991234567" autocomplete="off" value="' + esc(dr.tel) + '"><div class="rx-mu">Con este número se abre el WhatsApp al pedir.</div></div>';
     h += '<div class="rx-card"><h3>Productos que nos provee <span class="rx-mu">(' + pr.length + ')</span></h3>' +
       (pr.length ? pr.map((x, k) => '<div class="rx-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee"><span>' + esc(x.nombre) + ' <small class="rx-mu">' + esc(x.unidad || '') + '</small></span><button class="rx-b sm" data-rx="pl-pdel" data-i="' + k + '">✕</button></div>').join('') : '<div class="rx-mu c">Aún no hay productos. Agrega los que te vende este proveedor.</div>') + '</div>';
     if(PL.pick){
-      const q = norm(PL.pq), lst = cat().filter(it => !q || norm(it.nombre).indexOf(q) >= 0).slice(0, 40);
+      const q = norm(PL.pq), vv = {}, lst = cat().filter(it => (!q || norm(it.nombre).indexOf(q) >= 0) && !vv[norm(it.nombre)] && (vv[norm(it.nombre)] = 1)).slice(0, 40);
       const exacto = q && (cat().some(it => norm(it.nombre) === q) || pr.some(x => norm(x.nombre) === q));
       h += '<div class="rx-card"><h3>Agregar productos</h3><input class="rx-in" id="pl-pq" data-focus placeholder="Buscar producto o escribir uno nuevo…" autocomplete="off" value="' + esc(PL.pq) + '">' +
         (PL.pq.trim() && !exacto ? '<button class="rx-b ac" data-rx="pl-pnew" style="margin-top:8px">＋ Agregar «' + esc(PL.pq.trim()) + '» como producto nuevo</button>' : '') +
-        '<div class="rx-pl" style="margin-top:8px">' + (lst.length ? lst.map(it => '<button class="rx-pi ' + (ya.indexOf(it.id) >= 0 ? 'hecho' : '') + '" data-rx="pl-ppick" data-id="' + esc(it.id) + '"><span>' + esc(it.nombre) + ' <small>' + esc(it.uCompra || it.uAlmacen || it.unidad || '') + '</small></span>' + (ya.indexOf(it.id) >= 0 ? '<b>✓</b>' : '') + '</button>').join('') : '<div class="rx-mu">Sin resultados.</div>') + '</div>' +
+        '<div class="rx-pl" style="margin-top:8px">' + (lst.length ? lst.map(it => '<button class="rx-pi ' + ((ya.indexOf(it.id) >= 0 || yaN.indexOf(norm(it.nombre)) >= 0) ? 'hecho' : '') + '" data-rx="pl-ppick" data-id="' + esc(it.id) + '"><span>' + esc(it.nombre) + ' <small>' + esc(it.uCompra || it.uAlmacen || it.unidad || '') + '</small></span>' + ((ya.indexOf(it.id) >= 0 || yaN.indexOf(norm(it.nombre)) >= 0) ? '<b>✓</b>' : '') + '</button>').join('') : '<div class="rx-mu">Sin resultados.</div>') + '</div>' +
         '<button class="rx-b ok big" data-rx="pl-pfin" style="margin-top:10px">Listo</button></div>';
     } else h += '<button class="rx-b ok big" data-rx="pl-padd">＋ Agregar productos</button>';
-    h += '<div style="position:sticky;bottom:0;background:#fff;padding:10px 0;margin-top:10px;border-top:1px solid #eee"><div id="pl-st" class="rx-mu c" style="margin-bottom:6px;' + (dr.dirty ? 'color:#b45309">● Cambios sin guardar' : dr.ok ? 'color:#15803d">✔ Guardado' : '">Sin cambios') + '</div><button class="rx-b ok big" data-rx="pl-save" style="width:100%">💾 Guardar cambios</button></div>';
+    h += '<div style="position:sticky;bottom:0;background:#fff;padding:10px 0;margin-top:10px;border-top:1px solid #eee"><div id="pl-st" class="rx-mu c" style="margin-bottom:6px;' + (dr.dirty ? 'color:#b45309">● Cambios sin guardar' + (dr.quitados ? ' · se quitaron ' + dr.quitados + ' repetido' + (dr.quitados === 1 ? '' : 's') + ', toca Guardar' : '') : dr.ok ? 'color:#15803d">✔ Guardado' : '">Sin cambios') + '</div><button class="rx-b ok big" data-rx="pl-save" style="width:100%">💾 Guardar cambios</button></div>';
     h += '<button class="rx-b" data-rx="pl-del" style="margin-top:14px">🗑 Eliminar proveedor</button>';
     return h;
   }
@@ -4960,7 +4963,7 @@ function plEvento(a, id, i, t0){
       plGate(() => { const pid = 'prov_' + slug(nom); db.collection('proveedores_os').doc(pid).set({nombre:nom, telefono:tel, productos_lista:[], eliminado:false, creado:SV()}, {merge:true}).then(() => toast('Proveedor agregado')).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); if(!plProv(pid)) R.provs.push({id:pid, nombre:nom, telefono:tel, productos_lista:[]}); R.provsEli = R.provsEli.filter(x => x !== norm(nom)); PL.nuevo = false; PL.q = ''; PL.sel = pid; PL.dr = null; PL.pick = false; PL.pq = ''; render(); }); break; }
     case 'pl-padd': PL.pick = true; PL.pq = ''; R.noFocus = true; render(); break;
     case 'pl-pfin': PL.pick = false; PL.pq = ''; render(); break;
-    case 'pl-ppick': { if(!pv) break; const dr = plDr(pv), it = cat().filter(x => x.id === id)[0]; if(!it) break; const k = dr.prods.findIndex(x => x.id === id); if(k >= 0) dr.prods.splice(k, 1); else dr.prods.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); dr.dirty = true; dr.ok = false; R.noFocus = true; render(); break; }
+    case 'pl-ppick': { if(!pv) break; const dr = plDr(pv), it = cat().filter(x => x.id === id)[0]; if(!it) break; const k = dr.prods.findIndex(x => x.id === id || norm(x.nombre) === norm(it.nombre)); if(k >= 0) dr.prods.splice(k, 1); else dr.prods.push({id:id, nombre:it.nombre, unidad:it.uCompra || it.uAlmacen || it.unidad || 'unidades'}); dr.dirty = true; dr.ok = false; R.noFocus = true; render(); break; }
     case 'pl-pnew': { if(!pv) break; const nom = PL.pq.trim(); if(!nom) break; const dr = plDr(pv); if(!dr.prods.some(x => norm(x.nombre) === norm(nom))) dr.prods.push({id:'n_' + slug(nom), nombre:nom, unidad:'unidades'}); dr.dirty = true; dr.ok = false; PL.pq = ''; render(); break; }
     case 'pl-pdel': { if(!pv) break; const dr = plDr(pv); dr.prods.splice(i, 1); dr.dirty = true; dr.ok = false; render(); break; }
     case 'pl-save': { if(!pv) break; const dr = plDr(pv), nom = String((($('#pl-nom') || {}).value != null ? $('#pl-nom').value : dr.nom)).trim(), tel = String((($('#pl-tel') || {}).value != null ? $('#pl-tel').value : dr.tel)).trim();
