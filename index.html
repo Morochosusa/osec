@@ -3557,10 +3557,15 @@ const estLabItems=items=>{const ks=[];(items||[]).forEach(i=>{const k=sinAc(i.ca
 const areaNombre=k=>{const a=AREAS.find(x=>sinAc(x[0])===sinAc(k));return a?a[1].slice(a[1].indexOf(' ')+1):String(k||'');};
 function provDoc(area,items,pnum,prov){
   const code=LOCAL_CODE[dispositivo.local];
-  return {empresa:'morochos_ec',bodega:code,local:code,establecimiento:code,modulo:'rx1',estado:'por_recibir',origen:'pedido',pedido_numero:pnum?'P'+pnum:null,pedido_estacion:areaNombre(area),
-    destino:estKey(area),proveedor:prov||'',proveedor_id:prov?'prov_'+slugId(prov):null,documento:'',comprobante:{foto:false,excepcion:null},
+  const pns=[];items.forEach(i=>{const n=i._pn!=null?i._pn:pnum;if(n&&pns.indexOf(n)<0)pns.push(n);});const pn=pns.length?pns.map(n=>'P'+n).join(' + '):null;
+  const ak=i=>{const c=i.categoria||'';return AREAS.some(a=>sinAc(a[0])===sinAc(c))?estKey(c):estKey(i._est||area);};
+  const areas=[];items.forEach(i=>{const k=ak(i);if(areas.indexOf(k)<0)areas.push(k);});
+  const an=k=>{const a=AREAS.find(x=>estKey(x[0])===k);return a?areaNombre(a[0]):areaNombre(k);};
+  const lab=areas.map(an).join(' + ');
+  return {multi_area:areas.length>1,areas:areas,empresa:'morochos_ec',bodega:code,local:code,establecimiento:code,modulo:'rx1',estado:'por_recibir',origen:'pedido',pedido_numero:pn,pedido_estacion:areas.length>1?lab:areaNombre(area),
+    destino:areas[0]||estKey(area),proveedor:prov||'',proveedor_id:prov?'prov_'+slugId(prov):null,documento:'',comprobante:{foto:false,excepcion:null},
     items:items.map(i=>({producto_id:i.producto_id,nombre:i.producto_nombre,unidad:i.unidad_medida||'unidades',facturado:null,recibido:null,rechazado:0,motivos:[],motivo_texto:'',destino:'directo',provisional:false,vinculado:true,revisado:false,
-      conservacion:'ambiente',temperatura_c:null,peso_valor:0,peso_unidad:'kg',lote_proveedor:'',vence:'',nota_item:'',pedido:i.cantidad,seccion:i.seccion})),
+      conservacion:'ambiente',temperatura_c:null,peso_valor:0,peso_unidad:'kg',lote_proveedor:'',vence:'',nota_item:'',pedido:i.cantidad,seccion:i.seccion,area:ak(i),area_nombre:an(ak(i)),pedido_numero:i._pn!=null?'P'+i._pn:pn})),
     observaciones:'',responsable:'',creado_por_email:'',orden_compra_id:null,paso:1,historial:[{ts:new Date().toISOString(),accion:'pedido enviado al proveedor',por:areaNombre(area)+' · '+dispositivo.local,detalle:''}],
     fecha_creacion:serverTimestamp(),fecha_actividad:serverTimestamp()};
 }
@@ -4863,35 +4868,52 @@ function vLista(){
 /* ---- Por pedir: lo que llegó de la lista aprobada (categoría Proveedores). Eliges proveedor y lo mandas por WhatsApp ---- */
 const WA_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-4px" aria-hidden="true"><path fill="#25D366" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z"/><path fill="#fff" d="M8.6 7.3c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.9 4.4 4 2.200.9 2.600.7 3.100.7.500-.1 1.500-.6 1.700-1.200.2-.6.2-1.100.2-1.200-.1-.1-.3-.2-.6-.3l-1.800-.9c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.3-.1-1.100-.4-2-1.200-.7-.7-1.200-1.500-1.400-1.800-.1-.3 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5z"/></svg>';
 const ppProvDe = it => it.proveedor || ((R.provs.filter(p => plProds(p).some(x => x.id === it.producto_id))[0]) || {}).nombre || '';
+/* Todo lo pendiente de TODAS las áreas, agrupado por proveedor: se pide una sola vez por proveedor → una sola recepción y un solo comprobante */
+function ppGrupos(){
+  const g = {};
+  ppPend().forEach(d => (d.items || []).forEach((it, k) => { if(it.enviado) return; const pr = ppProvDe(it); if(!pr) return; (g[pr] = g[pr] || []).push({d:d, k:k, it:it}); }));
+  return g;
+}
+const ppAreaDe = d => d.estacion || 'Pedido';
+function ppSecciones(lst){   // [{d, items:[it]}] en el orden de los pedidos
+  const o = [], m = {}; lst.forEach(x => { if(!m[x.d.id]){ m[x.d.id] = {d:x.d, items:[]}; o.push(m[x.d.id]); } m[x.d.id].items.push(x.it); }); return o.sort((p, q) => (+p.d.numero || 0) - (+q.d.numero || 0));
+}
+function ppFechaProv(pr, lst){ PL.fe = PL.fe || {}; if(PL.fe[pr]) return PL.fe[pr]; const f = lst.map(x => x.d.fecha_entrega).filter(Boolean).sort()[0]; return f || ppManana(); }
 function vPedir(){
   const d = PL.pp && R.pp.filter(x => x.id === PL.pp)[0];
   if(d && d.estado !== 'enviado') return vPedirDet(d);
   PL.pp = null;
-  const l = ppPend();
+  const l = ppPend(), g = ppGrupos(), provs = Object.keys(g).sort((a, b) => a.localeCompare(b));
   if(!l.length) return '<div class="rx-vacio">No hay nada por pedir.<br><span class="rx-mu">Aquí llegan los productos de la categoría Proveedores cuando el encargado aprueba la lista.</span></div>';
-  return '<div class="rx-list rx-uno">' + l.map(r => { const n = (r.items || []).filter(i => !i.enviado).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' por pedir</div>' + (r.fecha_ms ? '<div class="rx-mu">🕒 ' + ppFH(r.fecha_ms) + '</div>' : '') + '<div class="rx-mu">' + (r.items || []).filter(i => !i.enviado).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
+  let h = '';
+  if(provs.length) h += '<div class="rx-mu" style="margin:2px 2px 8px"><b>Listo para pedir</b> · un solo pedido por proveedor, con todas las áreas</div>' + provs.map(pr => {
+    const lst = g[pr], fe = ppFechaProv(pr, lst), abierto = PL.wa && PL.wa[pr];
+    return '<div class="rx-card"><h3>' + esc(pr) + ' <span class="rx-mu">(' + lst.length + ')</span></h3>' +
+      '<div class="rx-mu" style="margin-bottom:4px">Entrega</div><input class="rx-in" type="date" data-ppvf="' + esc(pr) + '" value="' + esc(fe) + '"><div class="rx-mu">' + esc(ppFechaLarga(fe)) + '</div>' +
+      ppSecciones(lst).map(sc => '<div style="margin-top:10px;font-weight:700">' + esc(ppAreaDe(sc.d)) + (sc.d.numero ? ' · #P' + esc(sc.d.numero) : '') + '</div>' + sc.items.map((it, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + ' ' + esc(it.producto_nombre) + '</div>').join('')).join('') +
+      (abierto ? '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que toques «✓ Pedido».</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Pedido</button></div>'
+        : '<div style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '" style="width:100%">' + WA_ICON + ' Enviar por WhatsApp</button></div>') + '</div>';
+  }).join('');
+  const sin = l.filter(r => (r.items || []).some(i => !i.enviado && !ppProvDe(i)));
+  if(sin.length) h += '<div class="rx-mu" style="margin:14px 2px 8px"><b>Falta elegir proveedor</b></div><div class="rx-list rx-uno">' + sin.map(r => { const n = (r.items || []).filter(i => !i.enviado && !ppProvDe(i)).length; return '<div class="rx-row"><button class="rx-rb" data-rx="pp-open" data-id="' + esc(r.id) + '"><b>' + (r.numero ? '#' + esc(r.numero) + ' · ' : '') + esc(r.estacion || 'Lista') + '</b><div class="rx-mu">' + n + ' producto' + (n === 1 ? '' : 's') + ' sin proveedor</div>' + (r.fecha_ms ? '<div class="rx-mu">🕒 ' + ppFH(r.fecha_ms) + '</div>' : '') + '<div class="rx-mu">' + (r.items || []).filter(i => !i.enviado && !ppProvDe(i)).slice(0, 4).map(i => esc(i.producto_nombre)).join(' · ') + '</div></button></div>'; }).join('') + '</div>';
+  return h;
 }
 function vPedirDet(d){
-  const items = d.items || [], nombres = provsFrecuentes().slice().sort((x, y) => String(x).localeCompare(String(y))), grupos = {};   // registrados + los de recepciones anteriores
+  const items = d.items || [], nombres = provsFrecuentes().slice().sort((x, y) => String(x).localeCompare(String(y)));   // registrados + los de recepciones anteriores
   let h = '<div class="rx-top"><button class="rx-b sm" data-rx="pp-back">← Por pedir</button><div class="rx-tt">' + (d.numero ? '#' + esc(d.numero) + ' · ' : '') + esc(d.estacion || 'Lista') + '</div><span></span></div>';
-  h += '' + (d.fecha_ms ? '<div class="rx-mu c">Pedido recibido: ' + ppFH(d.fecha_ms) + '</div>' : '') + '<div class="rx-card"><h3>Fecha de entrega</h3><input class="rx-in" id="pp-fecha" type="date" value="' + esc(d.fecha_entrega || ppManana()) + '"><div class="rx-mu">' + esc(ppFechaLarga(d.fecha_entrega || ppManana())) + '</div></div>';
+  h += (d.fecha_ms ? '<div class="rx-mu c">Pedido recibido: ' + ppFH(d.fecha_ms) + '</div>' : '');
   h += '<div class="rx-card"><h3>¿A quién se lo pides?</h3>' + (nombres.length ? '' : '<div class="rx-mu">Primero registra tus proveedores en la pestaña «Lista».</div>') +
     items.map((it, k) => {
       if(it.enviado) return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><span>' + (k + 1) + '. ' + esc(it.producto_nombre) + ' <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></span><div class="rx-mu">✓ Pedido a ' + esc(it.proveedor || '') + '</div></div>';
-      const pr = ppProvDe(it); if(pr) (grupos[pr] = grupos[pr] || []).push(k);
+      const pr = ppProvDe(it);
       return '<div class="rx-row" style="padding:8px 0;border-bottom:1px solid #eee"><div><b>' + (k + 1) + '. ' + esc(it.producto_nombre) + '</b> <small class="rx-mu">' + fmt(it.cantidad) + ' ' + esc(it.unidad_medida || '') + '</small></div>' +
         '<select class="rx-in" data-pp="' + k + '" style="margin-top:4px"><option value="">Elegir proveedor…</option>' + nombres.map(n => '<option value="' + esc(n) + '"' + (n === pr ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '<option value="__nuevo">＋ Proveedor nuevo…</option></select></div>';
     }).join('') + '</div>';
   const faltan = items.filter(it => !it.enviado && !ppProvDe(it)).length;
-  if(faltan) h += '<div class="rx-mu c">Elige el proveedor de los ' + faltan + ' producto' + (faltan === 1 ? '' : 's') + ' que faltan para poder enviar el pedido.</div>';
-  else Object.keys(grupos).forEach(pr => {
-    h += '<div class="rx-card"><h3>' + esc(pr) + '</h3>' + grupos[pr].map((k, j) => '<div class="rx-mu">' + (j + 1) + '. ' + fmt(items[k].cantidad) + ' ' + esc(items[k].unidad_medida || '') + ' ' + esc(items[k].producto_nombre) + '</div>').join('') +
-      ((PL.wa && PL.wa[d.id + '|' + pr]) ?
-        '<div class="rx-mu" style="margin-top:10px;color:#b45309"><b>WhatsApp abierto.</b> El pedido sigue aquí hasta que toques «✓ Pedido».</div><div class="rx-two" style="margin-top:8px"><button class="rx-b" data-rx="pp-wa" data-v="' + esc(pr) + '">' + WA_ICON + ' Abrir de nuevo</button><button class="rx-b ok" data-rx="pp-ok" data-v="' + esc(pr) + '">✓ Pedido</button></div></div>' :
-        '<div style="margin-top:10px"><button class="rx-b ok" data-rx="pp-wa" data-v="' + esc(pr) + '" style="width:100%">' + WA_ICON + ' Enviar por WhatsApp</button></div></div>');
-  });
+  h += faltan ? '<div class="rx-mu c">Elige el proveedor de los ' + faltan + ' producto' + (faltan === 1 ? '' : 's') + ' que faltan.</div>' : '<div class="rx-mu c">✔ Listo. Vuelve a «Por pedir»: ahí se envía un solo pedido por proveedor.</div>';
   return h;
 }
+
 const ppFH = ms => { if(!ms) return ''; const d = new Date(ms); return d.toLocaleDateString('es-EC') + ' · ' + d.toLocaleTimeString('es-EC', {hour:'2-digit', minute:'2-digit', hour12:true}); };
 const ppManana = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const ppFechaLarga = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if(!m) return ''; const t = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-EC', {weekday:'long', day:'numeric', month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); };
@@ -4902,26 +4924,28 @@ function ppTel(nombre){
 function ppSet(d, k, v){
   d.items[k].proveedor = v; db.collection('pedir_proveedores').doc(d.id).set({items:d.items}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); }); render();
 }
-function ppWa(d, prov){   // solo abre WhatsApp: el pedido NO se registra hasta que ella confirme «Ya lo envié»
-  const its = (d.items || []).filter(it => !it.enviado && ppProvDe(it) === prov); if(!its.length) return;
-  const fEnt = d.fecha_entrega || ppManana();
-  const lineas = its.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n');
-  const est = d.estacion || (its[0] && its[0].categoria) || '';
-  const msg = '*' + prov + '*\n' + (d.numero ? 'Pedido #P' + d.numero : 'Pedido') + (est ? ' · *' + est + '*' : '') + '\nFecha: ' + new Date().toLocaleDateString('es-EC') + '\n\n' + lineas + '\n\n*Entrega:* ' + ppFechaLarga(fEnt);
-  PL.wa = PL.wa || {}; PL.wa[d.id + '|' + prov] = true;
+function ppWaProv(prov){   // solo abre WhatsApp: nada se registra hasta «✓ Pedido»
+  const lst = ppGrupos()[prov] || []; if(!lst.length) return;
+  const fEnt = ppFechaProv(prov, lst), sec = ppSecciones(lst);
+  const cuerpo = sec.map(sc => '*' + ppAreaDe(sc.d) + '*' + (sc.d.numero ? ' · Pedido #P' + sc.d.numero : '') + '\n' + sc.items.map((it, j) => (j + 1) + '. ' + fmt(it.cantidad) + ' ' + (it.unidad_medida || '') + ' ' + it.producto_nombre).join('\n')).join('\n\n');
+  const msg = '*' + prov + '*\nFecha: ' + new Date().toLocaleDateString('es-EC') + '\n\n' + cuerpo + '\n\n*Entrega:* ' + ppFechaLarga(fEnt);
+  PL.wa = PL.wa || {}; PL.wa[prov] = true;
   window.open('https://wa.me/' + ppTel(prov) + '?text=' + encodeURIComponent(msg), '_blank'); render();
 }
-function ppEnviar(d, prov){
-  const idx = []; (d.items || []).forEach((it, k) => { if(!it.enviado && ppProvDe(it) === prov) idx.push(k); }); if(!idx.length) return;
-  const its = idx.map(k => d.items[k]);
-  const nOrd = (d.n_orden || 0) + 1, codigo = 'OP-' + (d.numero || '0') + '-' + nOrd, fEnt = d.fecha_entrega || ppManana();
-  if(PL.wa) delete PL.wa[d.id + '|' + prov];
-  const rec = A.docProv(prov, its, d.numero, its[0].categoria || d.estacion); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
-  db.collection('recepciones_bodega').doc('pp_' + d.id + '_' + slug(prov) + '_' + Date.now()).set(rec).catch(er => { console.error(er); toast(errTxt(er)); });
-  idx.forEach(k => { d.items[k].enviado = true; d.items[k].proveedor = prov; d.items[k].orden = codigo; }); d.n_orden = nOrd;
-  const todo = d.items.every(i => i.enviado); d.estado = todo ? 'enviado' : 'por_pedir';
-  db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado, n_orden:nOrd, fecha_entrega:fEnt}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
-  toast('✅ Pedido a ' + prov + ' registrado · pasa a «Por recibir»'); if(todo) PL.pp = null; badge(); render();
+function ppEnviarProv(prov){
+  const lst = ppGrupos()[prov] || []; if(!lst.length) return;
+  const fEnt = ppFechaProv(prov, lst), pedidos = [], vistos = {}; lst.forEach(x => { if(!vistos[x.d.id]){ vistos[x.d.id] = 1; pedidos.push(x.d); } });
+  const nums = pedidos.map(d => d.numero || '0'), nOrd = Math.max.apply(null, pedidos.map(d => d.n_orden || 0)) + 1, codigo = 'OP-' + nums.join('+') + '-' + nOrd;
+  const its = lst.map(x => Object.assign({}, x.it, {_pn:x.d.numero || null, _est:x.d.estacion || ''}));
+  const rec = A.docProv(prov, its, null, its[0].categoria || its[0]._est); rec.orden_codigo = codigo; rec.fecha_entrega = fEnt;
+  db.collection('recepciones_bodega').doc('pp_' + pedidos[0].id + '_' + slug(prov) + '_' + Date.now()).set(rec).catch(er => { console.error(er); toast(errTxt(er)); });
+  if(PL.wa) delete PL.wa[prov];
+  pedidos.forEach(d => {
+    lst.filter(x => x.d.id === d.id).forEach(x => { d.items[x.k].enviado = true; d.items[x.k].proveedor = prov; d.items[x.k].orden = codigo; });
+    d.n_orden = nOrd; const todo = d.items.every(i => i.enviado); d.estado = todo ? 'enviado' : 'por_pedir';
+    db.collection('pedir_proveedores').doc(d.id).set({items:d.items, estado:d.estado, n_orden:nOrd, fecha_entrega:fEnt}, {merge:true}).catch(er => { console.error(er); toast('No se pudo guardar (revisa la conexión)'); });
+  });
+  toast('✅ Pedido a ' + prov + ' registrado · pasa a «Por recibir»'); badge(); render();
 }
 function vProvs(){
   const pv = PL.sel && plProv(PL.sel);
@@ -5036,10 +5060,11 @@ function itemCard(it, i){
     (tag || difs || extra ? '<div class="rx-ie">' + tag + difs + (extra ? '<div class="rx-mu">' + extra + '</div>' : '') + (frio ? '<div class="rx-warn">⚠ Temperatura alta · ' + cold.txt + '</div>' : '') + '</div>' : '') +
     (!it.revisado && cold ? '<div class="rx-mu">🧊 Producto frío: anota la temperatura en Detalle.</div>' : '') + '</div>';
 }
+const areaHdr = (d, it, prev) => (d.multi_area && it.area && (!prev || prev.area !== it.area || prev.pedido_numero !== it.pedido_numero)) ? '<div style="margin:14px 2px 6px;font-weight:700;font-size:15px;color:#3a2a1a">' + esc(it.area_nombre || areaNom(it.area)) + (it.pedido_numero ? ' · #' + esc(it.pedido_numero) : '') + '</div>' : '';
 function vProductos(){
   const d = R.d;
   return '<div class="rx-mu" style="margin:2px 2px 8px">' + d.items.length + ' producto' + (d.items.length === 1 ? '' : 's') + '</div>' +
-    '<div class="rx-items">' + d.items.map(itemCard).join('') + '</div>' +
+    '<div class="rx-items">' + d.items.map((it, i) => areaHdr(d, it, d.items[i - 1]) + itemCard(it, i)).join('') + '</div>' +
     '<div class="rx-card"><div class="rx-ph"><span class="rx-mu">Proveedor</span><b>' + esc(d.proveedor) + '</b></div></div>' +
     '<button class="rx-b ac big" data-rx="add-abrir">＋ Agregar producto</button>' +
     (d.items.length ? '' : '<div class="rx-mu c">Agrega lo que llegó. Si coincide con la factura, toca ✔ Todo correcto.</div>');
@@ -5049,9 +5074,9 @@ function vConfirmar(){
   const nDif = its.filter(x => x.c.estado === 'diferencia' || x.c.estado === 'no_llego' || x.c.estado === 'rechazado').length, sinVinc = its.filter(x => !x.it.vinculado && x.c.acept > 0).length;
   const nom = empleados(), otro = R.respOtro || (R.resp && nom.indexOf(R.resp) < 0);
   return '<div class="rx-conf"><div class="rx-card rx-wide"><div class="rx-ph"><b>' + esc(d.proveedor) + '</b><span class="rx-mu">' + (d.comprobante.foto ? '📷 con comprobante' : (d.comprobante.excepcion ? '⚠ sin comprobante' : '')) + '</span></div>' + (d.documento ? '<div class="rx-mu">Factura ' + esc(d.documento) + '</div>' : '') + '</div>' +
-    '<div class="rx-card rx-wide"><h3>Productos</h3>' + its.map((x, i) => '<div class="rx-sr"><span class="rx-no">' + (i + 1) + '</span><div class="rx-sn"><b>' + esc(x.it.nombre) + '</b><div class="rx-mu">' + (x.c.falt > 0 ? 'Faltan ' + fmt(x.c.falt) + ' · ' : '') + (x.c.sob > 0 ? 'Sobran ' + fmt(x.c.sob) + ' · ' : '') + (x.c.rech > 0 ? 'Rechazado ' + fmt(x.c.rech) + ' · ' : '') + (!x.it.vinculado ? '⏳ por vincular' : '') + '</div></div><div class="rx-sa"><b>' + fmt(x.c.acept) + '</b><small>' + esc(x.it.unidad) + '</small></div></div>').join('') +
+    '<div class="rx-card rx-wide"><h3>Productos</h3>' + its.map((x, i) => areaHdr(d, x.it, its[i - 1] && its[i - 1].it) + '<div class="rx-sr"><span class="rx-no">' + (i + 1) + '</span><div class="rx-sn"><b>' + esc(x.it.nombre) + '</b><div class="rx-mu">' + (x.c.falt > 0 ? 'Faltan ' + fmt(x.c.falt) + ' · ' : '') + (x.c.sob > 0 ? 'Sobran ' + fmt(x.c.sob) + ' · ' : '') + (x.c.rech > 0 ? 'Rechazado ' + fmt(x.c.rech) + ' · ' : '') + (!x.it.vinculado ? '⏳ por vincular' : '') + '</div></div><div class="rx-sa"><b>' + fmt(x.c.acept) + '</b><small>' + esc(x.it.unidad) + '</small></div></div>').join('') +
     '<div class="rx-mu">' + (nDif ? '⚠ ' + nDif + ' con diferencias. ' : '✔ Todo coincide con la factura. ') + (sinVinc ? sinVinc + ' sin inventario configurado: se guardan pero no suman existencias hasta vincularlos.' : '') + '</div></div>' +
-    '<div class="rx-card"><h3>Área de inventario</h3><div class="rx-mu">Elige a qué inventario entra lo recibido.</div><div class="rx-chips">' + areasRx().map(x => '<button class="rx-chip ' + (d.destino === x[0] ? 'on' : '') + '" data-rx="dest" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div></div>' +
+    (d.multi_area ? '<div class="rx-card"><h3>Área de inventario</h3><div class="rx-mu">Cada producto entra al inventario de su área: ' + esc(d.pedido_estacion || '') + '.</div></div>' : '<div class="rx-card"><h3>Área de inventario</h3><div class="rx-mu">Elige a qué inventario entra lo recibido.</div><div class="rx-chips">' + areasRx().map(x => '<button class="rx-chip ' + (d.destino === x[0] ? 'on' : '') + '" data-rx="dest" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div></div>') +
     '<div class="rx-card"><h3>Responsable</h3><div class="rx-chips">' + nom.map(n => '<button class="rx-chip ' + (R.resp === n ? 'on' : '') + '" data-rx="resp" data-v="' + esc(n) + '">' + esc(n) + '</button>').join('') + '<button class="rx-chip ' + (otro ? 'on' : '') + '" data-rx="resp-otro">Otro</button></div>' +
     (otro ? '<input class="rx-in" id="rx-resp" placeholder="Nombre de quien recibe" autocomplete="off" value="' + esc(nom.indexOf(R.resp) < 0 ? R.resp : '') + '">' : '') + '<div class="rx-mu">' + (mail() ? 'Sesión: ' + esc(mail()) : '') + '</div></div>' +
     '<div class="rx-card"><h3>Observaciones <span class="rx-mu">(opcional)</span></h3><input class="rx-in" id="rx-obs" placeholder="Ej. entrega completa, buen estado" autocomplete="off" value="' + esc(d.observaciones) + '"></div></div>';
@@ -5098,7 +5123,7 @@ function vDetalle(){
   const est = estadoDe(r), anu = est === 'anulada', its = (r.items || []);
   return '<div class="rx-top"><button class="rx-b sm" data-rx="det-volver">← Volver</button><div class="rx-tt">' + esc(r.proveedor || 'Entrega') + '</div><span></span></div>' +
     '<div class="rx-card"><div class="rx-ph"><b>' + (anu ? 'Anulada' : 'Confirmada') + '</b><span class="rx-mu">' + esc(fechaDia(r.fecha || r.fecha_actividad)) + '</span></div>' +
-    '<div class="rx-mu">Responsable: ' + esc(r.responsable || '—') + (r.documento ? ' · Factura ' + esc(r.documento) : '') + (r.destino ? ' · Área: ' + esc(areaNom(r.destino)) : '') + '</div>' +
+    '<div class="rx-mu">Responsable: ' + esc(r.responsable || '—') + (r.documento ? ' · Factura ' + esc(r.documento) : '') + (r.destino ? ' · Área: ' + esc(r.multi_area ? (r.pedido_estacion || '') : areaNom(r.destino)) : '') + '</div>' +
     ((r.comprobante && r.comprobante.foto) || r.foto ? '<button class="rx-b" data-rx="foto-ver" data-id="' + esc(r.id) + '">📷 Ver comprobante</button>' : (r.comprobante && r.comprobante.excepcion ? '<div class="rx-mu">⚠ Sin comprobante: ' + esc(r.comprobante.excepcion.motivo) + '</div>' : '')) +
     (r.observaciones ? '<div class="rx-mu">“' + esc(r.observaciones) + '”</div>' : '') + (anu && r.anulacion ? '<div class="rx-warn">Anulada por ' + esc(r.anulacion.por) + ' · ' + esc(r.anulacion.motivo) + '</div>' : '') + '</div>' +
     '<div class="rx-card"><h3>Productos</h3>' + its.map((it, i) => { const nm = it.nombre || it.producto_nombre, ac = it.aceptado != null ? it.aceptado : it.entra, fa = it.facturado != null ? it.facturado : it.solicitado;
@@ -5207,7 +5232,7 @@ function itemsFinales(d){
     return {producto_id:it.producto_id, nombre:it.nombre, unidad:it.unidad, facturado:it.facturado != null ? it.facturado : null, recibido:c.rec, rechazado:c.rech, aceptado:c.acept, entra:c.acept, faltante:c.falt, sobrante:c.sob, diferencia:c.dif,
       motivos:c.mots, motivo_texto:it.motivo_texto || '', estado_item:c.estado === 'no_llego' ? 'no_llego' : c.estado, destino:it.destino, inventario:invDe(it), vinculado:!!it.vinculado, provisional:!!it.provisional, entrada_generada:!!vinc,
       conservacion:it.conservacion || 'ambiente', temperatura_c:it.temperatura_c != null ? it.temperatura_c : null, peso_valor:it.peso_valor > 0 ? it.peso_valor : null, peso_unidad:it.peso_valor > 0 ? it.peso_unidad : null, peso_kg:it.peso_valor > 0 ? kg(it.peso_valor, it.peso_unidad) : null,
-      lote_proveedor:it.lote_proveedor || null, vence:it.vence || null, nota_item:it.nota_item || ''}; });
+      lote_proveedor:it.lote_proveedor || null, vence:it.vence || null, nota_item:it.nota_item || '', area:it.area || null, area_nombre:it.area_nombre || null, pedido_numero:it.pedido_numero || null}; });
 }
 function aInv(t, recId, it, d, ts, area){
   const code = A.local(), ek = area || d.destino, pid = it.producto_id, lab = areaNom(ek);
@@ -5232,7 +5257,7 @@ async function confirmar(){
       const rr = db.collection('recepciones_bodega').doc(id), s = await t.get(rr), cur = s.exists ? s.data() : null;
       if(cur && ((cur.estado !== 'borrador' && cur.estado !== 'por_recibir') || cur.entradas_generadas)) throw new Error('DUP');
       const ts = SV();
-      items.forEach(i => { if(i.entrada_generada) aInv(t, id, i, d, ts); });
+      items.forEach(i => { if(i.entrada_generada) aInv(t, id, i, d, ts, i.area || null); });
       t.set(rr, Object.assign({}, d, {estado:'confirmada', items:items, responsable:R.resp, entradas_generadas:true, pendiente_vinculacion:sinVinc, resultado:hayDif ? 'con_diferencias' : 'completa', proveedor_id:d.proveedor_id || null,
         fecha:ts, fecha_iso:hoyIso(), fecha_actividad:ts, fecha_creacion:ts, paso:4, sin_compra:true, historial:(d.historial || []).concat([hist('confirmada', hayDif ? 'con diferencias' : 'completa')])}));
     });
@@ -5264,7 +5289,7 @@ async function vincular(i, pid){
       const r = s.data(), its = (r.items || []).slice(), it = Object.assign({}, its[i]);
       if(r.estado !== 'confirmada' || it.vinculado || it.entrada_generada) throw new Error('DUP');
       const ts = SV(); it.producto_id = pid; it.nombre = c.nombre; it.vinculado = true; it.provisional = false; it.entrada_generada = it.aceptado > 0; it.inventario = invDe(it);
-      if(it.aceptado > 0) aInv(t, id, it, r, ts, r.destino);
+      if(it.aceptado > 0) aInv(t, id, it, r, ts, it.area || r.destino);
       its[i] = it; const pend = its.some(x => !x.vinculado && x.aceptado > 0);
       t.update(rr, {items:its, pendiente_vinculacion:pend, historial:(r.historial || []).concat([hist('vinculado', it.nombre)])});
     });
@@ -5283,7 +5308,7 @@ async function anular(id, motivo){
       const r = s.data(); if(r.estado !== 'confirmada') throw new Error('DUP');
       const ts = SV();
       (r.items || []).forEach(it => { if(!it.entrada_generada || !(it.aceptado > 0)) return;
-        const code = A.local(), ek = r.destino, pid = it.producto_id;
+        const code = A.local(), ek = it.area || r.destino, pid = it.producto_id;
         t.set(db.collection('inventario_estacion').doc(code + '__' + ek + '__' + pid), {cantidad:INC(-it.aceptado), actualizado:ts}, {merge:true});
         t.set(db.collection('movimientos_inventario_estacion').doc(id + '_' + pid + '_anul'), {local:code, estacion:areaNom(ek), estacion_key:ek, producto_id:pid, producto_nombre:it.nombre, tipo:'anulacion_recepcion', cantidad:-it.aceptado, unidad:it.unidad, recepcion_id:id, fecha:ts, nota:'Anulación de recepción: ' + motivo});
         if(ek === 'panaderia-produccion') t.delete(db.collection('pan_mp_mov').doc('rcp__' + id + '__' + pid)); });
@@ -5327,7 +5352,8 @@ function onClick(e){
     case 'pl-sub': PL.sub = v; R.tab = v === 'hist' ? 'hist' : 'prec'; PL.pp = null; PL.sel = null; PL.pick = false; render(); window.scrollTo(0, 0); break;
     case 'pp-open': PL.pp = id; render(); window.scrollTo(0, 0); break;
     case 'pp-back': PL.pp = null; render(); break;
-    case 'pp-wa': case 'pp-ok': { const dd = R.pp.filter(x => x.id === PL.pp)[0]; if(dd){ if(a === 'pp-wa') ppWa(dd, v); else ppEnviar(dd, v); } break; }
+    case 'pp-wa': ppWaProv(v); break;
+    case 'pp-ok': ppEnviarProv(v); break;
     case 'pl-new': case 'pl-cancel': case 'pl-open': case 'pl-back': case 'pl-add': case 'pl-padd': case 'pl-pfin': case 'pl-ppick': case 'pl-pnew': case 'pl-pdel': case 'pl-del': case 'pl-save': plEvento(a, id, i, t); break;
     case 'salir': salir(); break;
     case 'step': if(d){ if(n > R.step && !paso1ok(n)) break; R.step = n; guardar(); render(); window.scrollTo(0, 0); } break;
@@ -5402,6 +5428,7 @@ document.addEventListener('input', e => {
   else if(t.id === 'rx-pn' && R.m && R.m.nuevo){ R.m.nuevo.nombre = t.value; }
 });
 document.addEventListener('change', e => { const x = e.target;
+  if(x && x.dataset && x.dataset.ppvf){ PL.fe = PL.fe || {}; if(x.value) PL.fe[x.dataset.ppvf] = x.value; render(); return; }
   if(x && x.id === 'pp-fecha' && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(dd && x.value){ dd.fecha_entrega = x.value; db.collection('pedir_proveedores').doc(dd.id).set({fecha_entrega:x.value}, {merge:true}).catch(er => console.error(er)); R.noFocus = true; render(); } return; }
   if(x && (x.id === 'pl-nom' || x.id === 'pl-tel') && PL.sel){ const pv = plProv(PL.sel); if(pv){ const dr = plDr(pv); if(x.id === 'pl-nom') dr.nom = x.value; else dr.tel = x.value; dr.dirty = true; dr.ok = false; const st = document.getElementById('pl-st'); if(st){ st.style.color = '#b45309'; st.textContent = '● Cambios sin guardar'; } } return; }
   if(x && x.getAttribute && x.getAttribute('data-pp') != null && PL.pp){ const dd = R.pp.filter(y => y.id === PL.pp)[0]; if(!dd) return; const k = +x.getAttribute('data-pp');
